@@ -36,8 +36,9 @@ static class BoardVision
                 using (var cv = new SKCanvas(bmp))
                 {
                     cv.Clear(SKColors.Transparent);
-                    float scale = S / 45f;               // PENUH satu petak (Lichess gambar bidak edge-to-edge)
-                    cv.Scale(scale); cv.DrawPicture(svg.Picture);
+                    float scale = S * 0.86f / 45f;       // samakan dgn BoardRenderer (bidak 86% petak, di-tengah)
+                    float pad = (S - 45f * scale) / 2f;
+                    cv.Translate(pad, pad); cv.Scale(scale); cv.DrawPicture(svg.Picture);
                 }
                 bl.Add(bmp.Bytes); cl.Add(ch);
             }
@@ -47,12 +48,36 @@ static class BoardVision
 
     /// <summary>Gambar papan -> FEN penempatan bidak (rank8..rank1). null kalau gagal.
     /// flip=true kalau Hitam di bawah. Asumsi v1: gambar = papan (di-crop tengah jadi persegi).</summary>
+
+    // Potong margin/border berwarna seragam (mis. border coklat + label koordinat Lichess/render bot)
+    // supaya yang tersisa hanya area 8x8 papan. Heuristik: dari tiap sisi, buang baris/kolom yang
+    // >85% mirip warna border (diambil dari pojok), berhenti saat menemui pola papan (kotak-kotak).
+    static SKBitmap TrimToBoard(SKBitmap src)
+    {
+        int w=src.Width,h=src.Height; var px=src.Pixels;
+        SKColor bc=px[0];
+        bool simrow(int y){int same=0;for(int x=0;x<w;x++){var c=px[y*w+x];if(Math.Abs(c.Red-bc.Red)+Math.Abs(c.Green-bc.Green)+Math.Abs(c.Blue-bc.Blue)<48)same++;}return same>w*85/100;}
+        bool simcol(int x){int same=0;for(int y=0;y<h;y++){var c=px[y*w+x];if(Math.Abs(c.Red-bc.Red)+Math.Abs(c.Green-bc.Green)+Math.Abs(c.Blue-bc.Blue)<48)same++;}return same>h*85/100;}
+        int top=0,bot=h-1,left=0,right=w-1;
+        while(top<bot&&simrow(top))top++;
+        while(bot>top&&simrow(bot))bot--;
+        while(left<right&&simcol(left))left++;
+        while(right>left&&simcol(right))right--;
+        int bw=right-left+1,bh=bot-top+1;
+        if(bw<64||bh<64||(bw==w&&bh==h)) return src; // tak ada border terdeteksi
+        var info=new SKImageInfo(bw,bh,SKColorType.Bgra8888,SKAlphaType.Unpremul);
+        var outb=new SKBitmap(info);
+        using(var cv=new SKCanvas(outb)) cv.DrawBitmap(src,new SKRect(left,top,right+1,bot+1),new SKRect(0,0,bw,bh));
+        return outb;
+    }
+
     public static string? RecognizeFen(byte[] img, string assetsDir, bool flip = false)
     {
         EnsurePieces(assetsDir);
         if (_pieceBytes is null || _pieceBytes.Length == 0) return null;
-        using var src = SKBitmap.Decode(img);
-        if (src is null) return null;
+        using var src0 = SKBitmap.Decode(img);
+        if (src0 is null) return null;
+        using var src = TrimToBoard(src0);
 
         // crop tengah jadi persegi, lalu skala ke 8S x 8S (tiap petak = S)
         int side = Math.Min(src.Width, src.Height);
@@ -120,7 +145,7 @@ static class BoardVision
         // gelap tetap menghasilkan cukup tinta -> tak salah dianggap kosong. Highlight langkah =
         // tint seragam -> tinta ~0 -> tetap kosong dengan benar.
         int ink = InkCount(bd, stride, x0, y0, br, bg, bb, 45);
-        if (ink < (int)(S * S * 0.035)) return '.';
+        int inner = (S - 12) * (S - 12); if (ink < (int)(inner * 0.045)) return '.';
         long best = long.MaxValue; char bestCh = '.';
         for (int i = 0; i < _pieceBytes!.Length; i++)
         {
@@ -132,11 +157,11 @@ static class BoardVision
 
     static int InkCount(byte[] bd, int stride, int x0, int y0, int br, int bg, int bb, int t)
     {
-        int n = 0;
-        for (int j = 0; j < S; j++)
+        int n = 0, m = 6;   // abaikan tepi -> toleran misalignment/sliver border
+        for (int j = m; j < S - m; j++)
         {
             int row = (y0 + j) * stride + x0 * 4;
-            for (int i = 0; i < S; i++)
+            for (int i = m; i < S - m; i++)
             {
                 int o = row + i * 4;
                 if (Math.Abs(bd[o] - bb) > t || Math.Abs(bd[o + 1] - bg) > t || Math.Abs(bd[o + 2] - br) > t) n++;
@@ -147,7 +172,7 @@ static class BoardVision
 
     static (int r, int g, int b) AvgCorners(byte[] bd, int stride, int x0, int y0)
     {
-        int[] xs = { 3, S - 4, 3, S - 4 }, ys = { 3, 3, S - 4, S - 4 };
+        int[] xs = { 7, S - 8, 7, S - 8 }, ys = { 7, 7, S - 8, S - 8 };
         long r = 0, g = 0, b = 0;
         for (int k = 0; k < 4; k++)
         {
@@ -174,21 +199,32 @@ static class BoardVision
 
     static long MadPiece(byte[] bd, int stride, int x0, int y0, byte[] piece, int br, int bg, int bb)
     {
-        long sum = 0;
-        for (int j = 0; j < S; j++)
+        int W = 8 * S, H = 8 * S;
+        long best = long.MaxValue;
+        for (int dy = -2; dy <= 2; dy++)
         {
-            int row = (y0 + j) * stride + x0 * 4;
-            int prow = j * S * 4;
-            for (int i = 0; i < S; i++)
+            for (int dx = -2; dx <= 2; dx++)
             {
-                int o = row + i * 4, po = prow + i * 4;
-                int pa = piece[po + 3];
-                int eb = (piece[po] * pa + bb * (255 - pa)) / 255;
-                int eg = (piece[po + 1] * pa + bg * (255 - pa)) / 255;
-                int er = (piece[po + 2] * pa + br * (255 - pa)) / 255;
-                sum += Math.Abs(bd[o] - eb) + Math.Abs(bd[o + 1] - eg) + Math.Abs(bd[o + 2] - er);
+                long sum = 0;
+                for (int j = 0; j < S; j++)
+                {
+                    int by = y0 + j + dy; if (by < 0) by = 0; else if (by >= H) by = H - 1;
+                    int row = by * stride;
+                    int prow = j * S * 4;
+                    for (int i = 0; i < S; i++)
+                    {
+                        int bx = x0 + i + dx; if (bx < 0) bx = 0; else if (bx >= W) bx = W - 1;
+                        int o = row + bx * 4, po = prow + i * 4;
+                        int pa = piece[po + 3];
+                        int eb = (piece[po] * pa + bb * (255 - pa)) / 255;
+                        int eg = (piece[po + 1] * pa + bg * (255 - pa)) / 255;
+                        int er = (piece[po + 2] * pa + br * (255 - pa)) / 255;
+                        sum += Math.Abs(bd[o] - eb) + Math.Abs(bd[o + 1] - eg) + Math.Abs(bd[o + 2] - er);
+                    }
+                }
+                if (sum < best) best = sum;
             }
         }
-        return sum;
+        return best;
     }
 }
