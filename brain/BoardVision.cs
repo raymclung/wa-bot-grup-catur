@@ -137,6 +137,32 @@ static class BoardVision
         return sb.ToString(0, 8);
     }
 
+    /// <summary>Balik penempatan 180 derajat (papan yang di-screenshot dari sisi Hitam).
+    /// a8 &lt;-&gt; h1, dst. Input/output = FEN penempatan (tanpa giliran).</summary>
+    public static string FlipPlacement(string placement)
+    {
+        var full = new System.Text.StringBuilder();
+        foreach (var row in placement.Split('/'))
+            foreach (char c in row) { if (char.IsDigit(c)) full.Append('.', c - '0'); else full.Append(c); }
+        while (full.Length < 64) full.Append('.');
+        char[] arr = full.ToString().Substring(0, 64).ToCharArray();
+        System.Array.Reverse(arr);   // putar 180 derajat
+        var outSb = new System.Text.StringBuilder();
+        for (int r = 0; r < 8; r++)
+        {
+            int empty = 0;
+            for (int c = 0; c < 8; c++)
+            {
+                char ch = arr[r * 8 + c];
+                if (ch == '.') empty++;
+                else { if (empty > 0) { outSb.Append(empty); empty = 0; } outSb.Append(ch); }
+            }
+            if (empty > 0) outSb.Append(empty);
+            if (r < 7) outSb.Append('/');
+        }
+        return outSb.ToString();
+    }
+
     static char Classify(byte[] bd, int stride, int x0, int y0)
     {
         var (br, bg, bb) = AvgCorners(bd, stride, x0, y0);

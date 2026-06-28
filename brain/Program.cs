@@ -313,6 +313,7 @@ public class Program
 				sent = SendLog.Sent,
 				failed = SendLog.Failed,
 				retryQueue = RetryQueue.Count,
+				puzzlePool = puzzlePool.Count,
 				activePuzzles = activePuzzles.Count,
 				warningsTracked = warnings.Count,
 				moderatedToday = modToday,
@@ -787,7 +788,9 @@ public class Program
 			string paKey = cl_278.msg.Jid + "|" + senderNum;
 			if (PendingAnalysis.Has(paKey))
 			{
-				string lowPa = cl_278.msg.Text.Trim().ToLowerInvariant();
+				string lowPaRaw = cl_278.msg.Text.Trim().ToLowerInvariant();
+				bool flipPa = lowPaRaw.Contains("balik") || lowPaRaw.Contains("terbalik") || lowPaRaw.Contains("flip");
+				string lowPa = lowPaRaw.Replace("terbalik", "").Replace("balik", "").Replace("flip", "").Trim();
 				bool enabled;
 				switch (lowPa)
 				{
@@ -827,6 +830,7 @@ public class Program
 					string placePa = PendingAnalysis.Take(paKey);
 					if (placePa != null)
 					{
+						if (flipPa) placePa = BoardVision.FlipPlacement(placePa); // sisi Hitam -> putar 180
 						SendTyping(cl_278.msg.Jid, ctx.Channel);
 						string fenPa = BoardVision.BuildFullFen(placePa, whitePa.Value);
 						ChessAnalysis.Output oPa = (await ChessAnalysis.Run(fenPa, config.Ai, http, app.Logger)) ?? new ChessAnalysis.Output("Gagal menganalisa.", "");
@@ -2399,7 +2403,7 @@ public class Program
 							catch
 							{
 							}
-							string ask = "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(kalau ada bidak salah baca, kirim FEN-nya)";
+							string ask = "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(papan TERBALIK / dari sisi Hitam? balas mis. *hitam balik*. Bidak salah baca? kirim FEN-nya.)";
 							if (imgAsk == null)
 							{
 								await PostJson(http, outBase + "/send", new
@@ -2423,6 +2427,7 @@ public class Program
 								action = "analisa-ask-side"
 							});
 						}
+						if (al.Contains("balik") || al.Contains("terbalik") || al.Contains("flip")) placement = BoardVision.FlipPlacement(placement); // papan sisi Hitam -> putar 180
 						argAn = BoardVision.BuildFullFen(placement, !blackGiven);
 						noteAn = "\ud83d\udcf7 Posisi terbaca dari gambar (" + (blackGiven ? "Hitam" : "Putih") + " jalan). Kalau ada bidak salah baca, kirim FEN-nya ya.\n\n";
 					}
@@ -3878,7 +3883,8 @@ public class Program
 			ok = true,
 			rules = cl_472.rules.Count,
 			exempt = cl_472.exempt.Count,
-			warned = cl_472.warnings.Count
+			warned = cl_472.warnings.Count,
+			puzzlePool = cl_472.puzzlePool.Count
 		})));
 		cl_472.app.MapGet("/analyze", (Func<string, Task<IResult>>)async delegate(string? q)
 		{
@@ -4345,7 +4351,9 @@ public class Program
 			string paKey = msg.Jid + "|" + senderNum;
 			if (PendingAnalysis.Has(paKey))
 			{
-				string lowPa = msg.Text.Trim().ToLowerInvariant();
+				string lowPaRaw = msg.Text.Trim().ToLowerInvariant();
+				bool flipPa = lowPaRaw.Contains("balik") || lowPaRaw.Contains("terbalik") || lowPaRaw.Contains("flip");
+				string lowPa = lowPaRaw.Replace("terbalik", "").Replace("balik", "").Replace("flip", "").Trim();
 				bool enabled;
 				switch (lowPa)
 				{
@@ -4385,6 +4393,7 @@ public class Program
 					string placePa = PendingAnalysis.Take(paKey);
 					if (placePa != null)
 					{
+						if (flipPa) placePa = BoardVision.FlipPlacement(placePa); // sisi Hitam -> putar 180
 						cl_472.SendTyping(msg.Jid, ctx.Channel);
 						string fenPa = BoardVision.BuildFullFen(placePa, whitePa.Value);
 						ChessAnalysis.Output oPa = (await ChessAnalysis.Run(fenPa, cl_472.config.Ai, cl_472.http, cl_472.app.Logger)) ?? new ChessAnalysis.Output("Gagal menganalisa.", "");
@@ -5949,7 +5958,7 @@ public class Program
 							catch
 							{
 							}
-							string ask = "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(kalau ada bidak salah baca, kirim FEN-nya)";
+							string ask = "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(papan TERBALIK / dari sisi Hitam? balas mis. *hitam balik*. Bidak salah baca? kirim FEN-nya.)";
 							if (imgAsk == null)
 							{
 								await PostJson(cl_472.http, outBase + "/send", new
@@ -5973,6 +5982,7 @@ public class Program
 								action = "analisa-ask-side"
 							});
 						}
+						if (al.Contains("balik") || al.Contains("terbalik") || al.Contains("flip")) placement = BoardVision.FlipPlacement(placement); // papan sisi Hitam -> putar 180
 						argAn = BoardVision.BuildFullFen(placement, !blackGiven);
 						noteAn = "\ud83d\udcf7 Posisi terbaca dari gambar (" + (blackGiven ? "Hitam" : "Putih") + " jalan). Kalau ada bidak salah baca, kirim FEN-nya ya.\n\n";
 					}
@@ -7721,6 +7731,7 @@ internal class PuzzleItem
 	public int Rating { get; set; }
 
 	[JsonPropertyName("themes")]
+	[JsonConverter(typeof(ThemesStringConverter))]
 	public string Themes { get; set; } = "";
 
 	[JsonPropertyName("solutionSan")]
@@ -7728,6 +7739,38 @@ internal class PuzzleItem
 
 	[JsonPropertyName("fens")]
 	public string[] Fens { get; set; } = Array.Empty<string>();
+}
+internal class ThemesStringConverter : JsonConverter<string>
+{
+	public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+	{
+		if (reader.TokenType == JsonTokenType.String)
+		{
+			return reader.GetString() ?? "";
+		}
+		if (reader.TokenType == JsonTokenType.StartArray)
+		{
+			List<string> items = new List<string>();
+			while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+			{
+				if (reader.TokenType == JsonTokenType.String)
+				{
+					string? item = reader.GetString();
+					if (!string.IsNullOrWhiteSpace(item))
+					{
+						items.Add(item);
+					}
+				}
+			}
+			return string.Join(" ", items);
+		}
+		return "";
+	}
+
+	public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+	{
+		writer.WriteStringValue(value ?? "");
+	}
 }
 internal class ActivePuzzle
 {
