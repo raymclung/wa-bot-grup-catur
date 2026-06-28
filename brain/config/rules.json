@@ -1,0 +1,56 @@
+{
+  "_comment": "Daftar aturan moderasi (dibaca oleh brain C#). Tambah aturan baru di array 'rules'. 'pattern' = regex .NET; di JSON setiap backslash ditulis ganda (\\\\). Set 'enabled': false untuk mematikan aturan tanpa menghapus. 'flags' mendukung 'i' (abaikan huruf besar/kecil).",
+  "rules": [
+    {
+      "id": "judi-keywords",
+      "name": "Judi online (kata kunci)",
+      "reason": "promosi judi online",
+      "enabled": true,
+      "flags": "i",
+      "pattern": "(slot\\s*gacor|judi\\s*(online|bola|slot)|situs\\s*(slot|judi)|togel|maxwin|rtp\\s*(live|slot|gacor)|scatter\\s*hitam|deposit\\s*(pulsa|dana|via)|bonus\\s*new\\s*member|jackpot|pragmatic\\s*play|gates\\s*of\\s*olympus|raja\\s*slot|pola\\s*gacor|anti\\s*rungkad)"
+    },
+    {
+      "id": "judi-url",
+      "name": "Link situs judi",
+      "reason": "link situs judi",
+      "enabled": true,
+      "flags": "i",
+      "pattern": "https?:\\/\\/\\S*(slot|togel|judi|gacor|maxwin|casino|poker|sbobet|bet188|dominoqq|qiuqiu)\\S*"
+    },
+    {
+      "id": "grup-invite",
+      "name": "Link undangan grup lain",
+      "reason": "link undangan grup lain",
+      "enabled": true,
+      "flags": "i",
+      "pattern": "chat\\.whatsapp\\.com\\/[A-Za-z0-9]+"
+    },
+    {
+      "id": "lichess-link",
+      "name": "Link Lichess",
+      "reason": "link Lichess",
+      "enabled": false,
+      "note": "Mati global; aktifkan per-grup via enabledRules untuk grup chess.com.",
+      "flags": "i",
+      "pattern": "lichess\\.org"
+    },
+    {
+      "id": "chesscom-link",
+      "name": "Link Chess.com",
+      "reason": "link Chess.com",
+      "enabled": false,
+      "note": "Mati global; aktifkan per-grup via enabledRules untuk grup lichess.",
+      "flags": "i",
+      "pattern": "chess\\.com"
+    },
+    {
+      "id": "spam-shortener",
+      "name": "Link pemendek URL (sering dipakai spam)",
+      "reason": "link mencurigakan / spam",
+      "enabled": false,
+      "note": "Dimatikan default karena bisa salah-hapus link yang sah. Aktifkan jika grup banyak spam shortener.",
+      "flags": "i",
+      "pattern": "(bit\\.ly|cutt\\.ly|tinyurl\\.com|s\\.id|t\\.me)\\/\\S+"
+    }
+  ]
+}

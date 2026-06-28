@@ -1,0 +1,9 @@
+{
+  "name": "wabot-telegram-adapter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Adapter Telegram untuk WA-Bot brain (channel-agnostic). Tanpa dependensi — pakai fetch/FormData bawaan Node 18+.",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=18" }
+}

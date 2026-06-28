@@ -1,0 +1,47 @@
+# Node (gateway)
+gateway/node_modules/
+gateway/auth/*
+!gateway/auth/.gitkeep
+
+# .NET (brain)
+brain/bin/
+brain/obj/
+
+# Runtime data (brain)
+brain/logs/
+brain/data/
+
+# Misc
+*.log
+npm-debug.log*
+.env
+
+# Secrets & config operasional (jangan commit)
+brain/config/secrets.json
+brain/config/config.json
+gateway/config.json
+
+# Engine binary besar (~109M stockfish)
+brain/engine/
+
+# Backups & artefak recovery (besar / bukan source-of-truth)
+backups/
+RECOVERY/
+*.bak
+*.bak-mojibake
+*.bak-prejudit
+*.bak-prechess
+*.bak-premod-*
+brain/config/*.bak-*
+gateway/*.bak-*
+
+# Auth archive (sesi WhatsApp - sensitif)
+gateway/auth-archive-*/
+
+# WhatsApp QR (sensitif)
+gateway/qr.png
+gateway/qr.html
+
+# Editor / OS
+.vs/
+Thumbs.db
