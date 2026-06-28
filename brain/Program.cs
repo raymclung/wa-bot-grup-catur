@@ -2573,7 +2573,7 @@ public class Program
 								await lf_PostJson_0_40(http, outBase + "/send", new
 								{
 									jid = CS_cl8_278.msg.Jid,
-									text = t,
+									text = t + PuzzleMove.ThemeNote(pap.Puzzle.Themes),
 									mentions = mentionList.ToArray(),
 									replyToId = inMsgId
 								});
@@ -3219,10 +3219,15 @@ public class Program
 				}
 				int pzMin = slot?.MinRating ?? 0;
 				int pzMax = (slot != null && slot.MaxRating > 0) ? slot.MaxRating : 9999;
-				List<PuzzleItem> cand = puzzlePool.Where((PuzzleItem p) => !CS_cl8_12.activeIds.Contains(p.Id) && p.Rating >= pzMin && p.Rating <= pzMax).ToList();
+				string pzTheme = slot?.Theme ?? "";
+				List<PuzzleItem> cand = puzzlePool.Where((PuzzleItem p) => !CS_cl8_12.activeIds.Contains(p.Id) && p.Rating >= pzMin && p.Rating <= pzMax && (pzTheme.Length == 0 || p.Themes.IndexOf(pzTheme, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
 				if (cand.Count == 0)
 				{
-					cand = puzzlePool.Where((PuzzleItem p) => p.Rating >= pzMin && p.Rating <= pzMax).ToList();
+					cand = puzzlePool.Where((PuzzleItem p) => p.Rating >= pzMin && p.Rating <= pzMax && (pzTheme.Length == 0 || p.Themes.IndexOf(pzTheme, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
+				}
+				if (cand.Count == 0 && pzTheme.Length > 0)
+				{
+					cand = puzzlePool.Where((PuzzleItem p) => p.Themes.IndexOf(pzTheme, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
 				}
 				if (cand.Count == 0)
 				{
@@ -6117,7 +6122,7 @@ public class Program
 								await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
 								{
 									jid = msg.Jid,
-									text = t,
+									text = t + PuzzleMove.ThemeNote(pap.Puzzle.Themes),
 									mentions = mentionList.ToArray(),
 									replyToId = inMsgId
 								});
@@ -7680,6 +7685,9 @@ internal class PuzzleDailySlot
 	public int MaxRating { get; set; } = 9999;
 
 	public string Label { get; set; } = "Harian";
+
+	// Filter tema Lichess (mis. "fork", "endgame", "mateIn2"); kosong = semua tema.
+	public string Theme { get; set; } = "";
 }
 internal class PuzzleItem
 {
@@ -7694,6 +7702,9 @@ internal class PuzzleItem
 
 	[JsonPropertyName("rating")]
 	public int Rating { get; set; }
+
+	[JsonPropertyName("themes")]
+	public string Themes { get; set; } = "";
 
 	[JsonPropertyName("solutionSan")]
 	public string[] SolutionSan { get; set; } = Array.Empty<string>();
@@ -8039,7 +8050,17 @@ internal static class PuzzleMove
 		}
 		else
 		{
-			return null;
+			string th = MapTheme(arg);
+			if (th.Length == 0)
+			{
+				return null;
+			}
+			return new PuzzleDailySlot
+			{
+				Label = char.ToUpperInvariant(arg[0]) + arg.Substring(1),
+				Theme = th,
+				RevealMinutes = revealMinutes
+			};
 		}
 		return new PuzzleDailySlot
 		{
@@ -8048,6 +8069,69 @@ internal static class PuzzleMove
 			MaxRating = max,
 			RevealMinutes = revealMinutes
 		};
+	}
+
+	// Petakan kata tema (Indonesia/Inggris) -> nama tema Lichess. "" kalau tak dikenal.
+	static string MapTheme(string arg)
+	{
+		switch (arg)
+		{
+		case "fork": case "garpu": return "fork";
+		case "pin": case "ikat": case "ikatan": return "pin";
+		case "skewer": case "tusuk": case "tusukan": return "skewer";
+		case "endgame": case "akhir": case "endgames": return "endgame";
+		case "opening": case "pembukaan": return "opening";
+		case "middlegame": case "tengah": return "middlegame";
+		case "mate": case "skakmat": case "mat": case "matt": case "mati": return "mate";
+		case "matein1": case "mate1": return "mateIn1";
+		case "matein2": case "mate2": return "mateIn2";
+		case "matein3": case "mate3": return "mateIn3";
+		case "sacrifice": case "korban": case "sac": case "pengorbanan": return "sacrifice";
+		case "promotion": case "promosi": return "promotion";
+		case "discovered": case "discoveredattack": case "buka": return "discoveredAttack";
+		case "backrank": case "backrankmate": return "backRankMate";
+		case "hanging": case "hangingpiece": case "menggantung": return "hangingPiece";
+		case "deflection": case "deflesi": return "deflection";
+		case "trapped": case "trappedpiece": case "terperangkap": return "trappedPiece";
+		case "zugzwang": return "zugzwang";
+		case "advantage": case "unggul": return "advantage";
+		case "crushing": case "telak": return "crushing";
+		default: return "";
+		}
+	}
+
+	// Catatan tema taktik (Bahasa Indonesia) untuk pesan puzzle SELESAI. Maks 3 tema bermakna.
+	static readonly Dictionary<string, string> ThemeId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+	{
+		{ "fork", "garpu" }, { "pin", "ikatan" }, { "skewer", "tusukan" }, { "endgame", "akhir permainan" },
+		{ "opening", "pembukaan" }, { "middlegame", "tengah permainan" }, { "sacrifice", "pengorbanan" },
+		{ "mate", "skakmat" }, { "mateIn1", "skakmat 1 langkah" }, { "mateIn2", "skakmat 2 langkah" },
+		{ "mateIn3", "skakmat 3 langkah" }, { "promotion", "promosi" }, { "discoveredAttack", "serangan terbuka" },
+		{ "backRankMate", "skakmat baris belakang" }, { "hangingPiece", "bidak menggantung" }, { "deflection", "pengalihan" },
+		{ "trappedPiece", "bidak terperangkap" }, { "zugzwang", "zugzwang" }, { "doubleCheck", "skak ganda" },
+		{ "attraction", "pemancingan" }, { "clearance", "pembersihan jalur" }, { "quietMove", "langkah tenang" },
+		{ "defensiveMove", "langkah bertahan" }, { "interference", "interferensi" }, { "intermezzo", "langkah antara" }
+	};
+
+	public static string ThemeNote(string themes)
+	{
+		if (string.IsNullOrWhiteSpace(themes))
+		{
+			return "";
+		}
+		List<string> picked = new List<string>();
+		foreach (string raw in themes.Split(new char[1] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+		{
+			if (ThemeId.TryGetValue(raw, out string id) && !picked.Contains(id))
+			{
+				picked.Add(id);
+				if (picked.Count >= 3)
+				{
+					break;
+				}
+			}
+		}
+		return (picked.Count == 0) ? "" : ("\n\U0001F4A1 Tema: " + string.Join(", ", picked) + ".");
 	}
 
 	public static string StripNotation(string s)
