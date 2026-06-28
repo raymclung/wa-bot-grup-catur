@@ -1,3 +1,18 @@
+// ============================================================================
+//  WA Bot - BRAIN (moderasi + puzzle + AI). ASP.NET minimal API, listen :5050.
+//
+//  CATATAN: file ini DIPULIHKAN dengan men-decompile DLL live pada 2026-06-28
+//  (lihat docs/INSIDEN-2026-06-28.md). Komentar asli hilang saat decompile.
+//  Identifier sudah di-rapikan sejauh aman:
+//    - fungsi lokal  -> nama asli (PostJson, RevealPuzzleAsync, PostPuzzleAsync, ...)
+//    - cl_<N>        = closure (capture class) hasil compiler  (dulu CS_cl8_<N>)
+//    - DC_<N>_<M>    = tipe display/closure CLASS
+//    - lam_<N>       = method lambda
+//  PENTING: decompiler meng-INLINE beberapa fungsi lokal jadi DUA salinan
+//  (mis. logika handler /incoming ada di lambda 'lam_21' DAN handler kedua yang
+//  memakai cl_472). Tiap ubah handler puzzle/moderasi, terapkan ke KEDUA salinan,
+//  lalu build-verify. Usahakan tetap ASCII saat menambah string.
+// ============================================================================
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -106,9 +121,9 @@ public class Program
 			return config;
 		}
 
-		internal async Task<bool> lf_PostImportant_5(string url, object body)
+		internal async Task<bool> PostImportant(string url, object body)
 		{
-			bool ok = await lf_PostJson_0_40(http, url, body);
+			bool ok = await PostJson(http, url, body);
 			if (!ok && !Sleeper.Asleep)
 			{
 				RetryQueue.Enqueue(url, body);
@@ -116,7 +131,7 @@ public class Program
 			return ok;
 		}
 
-		internal void lf_SendTyping_6(string jid, string channel)
+		internal void SendTyping(string jid, string channel)
 		{
 			if (Sleeper.Asleep)
 			{
@@ -138,7 +153,7 @@ public class Program
 
 		internal async Task? lam_7()
 		{
-			HashSet<string> sentSlots = lf_LoadPuzzleDailyState_0_27(puzzleDailyStatePath);
+			HashSet<string> sentSlots = LoadPuzzleDailyState(puzzleDailyStatePath);
 			while (true)
 			{
 				try
@@ -146,11 +161,11 @@ public class Program
 					PuzzleConfig pc = config.Puzzle;
 					if (pc != null && pc.Enabled && puzzlePool.Count > 0)
 					{
-						DC_0_1 CS_cl8_7 = new DC_0_1
+						DC_0_1 cl_7 = new DC_0_1
 						{
 							nowLocal = DateTime.UtcNow.AddHours(pc.TimezoneOffsetHours)
 						};
-						string today = CS_cl8_7.nowLocal.ToString("yyyy-MM-dd");
+						string today = cl_7.nowLocal.ToString("yyyy-MM-dd");
 						string[] groupJids = pc.GroupJids;
 						List<string> dailyTargets = ((groupJids != null && groupJids.Length > 0) ? pc.GroupJids.Where((string s) => !string.IsNullOrWhiteSpace(s)).ToList() : (string.IsNullOrWhiteSpace(pc.GroupJid) ? new List<string>() : new List<string> { pc.GroupJid }));
 						PuzzleDailySlot[] dailySlots = pc.DailySlots;
@@ -165,7 +180,7 @@ public class Program
 								Label = "Harian"
 							}
 						});
-						foreach (PuzzleDailySlot slot in dailySlots2.Where((PuzzleDailySlot s) => s.Hour == CS_cl8_7.nowLocal.Hour))
+						foreach (PuzzleDailySlot slot in dailySlots2.Where((PuzzleDailySlot s) => s.Hour == cl_7.nowLocal.Hour))
 						{
 							if (dailyTargets.Count == 0)
 							{
@@ -175,7 +190,7 @@ public class Program
 							using List<string>.Enumerator enumerator2 = dailyTargets.GetEnumerator();
 							while (enumerator2.MoveNext())
 							{
-								DC_0_2 CS_cl8_8 = new DC_0_2
+								DC_0_2 cl_8 = new DC_0_2
 								{
 									gj = enumerator2.Current
 								};
@@ -183,25 +198,25 @@ public class Program
 								lock (puzzleLock)
 								{
 									activeIds = (from a in activePuzzles.Values
-										where !a.Revealed && a.Jid != CS_cl8_8.gj
+										where !a.Revealed && a.Jid != cl_8.gj
 										select a.Puzzle.Id).ToHashSet();
 								}
-								string slotKey = $"{today}|{slot.Hour}|{slot.Label}|{CS_cl8_8.gj}";
+								string slotKey = $"{today}|{slot.Hour}|{slot.Label}|{cl_8.gj}";
 								if (!sentSlots.Contains(slotKey))
 								{
 									ActivePuzzle curp;
 									lock (puzzleLock)
 									{
-										activePuzzles.TryGetValue(CS_cl8_8.gj, out curp);
+										activePuzzles.TryGetValue(cl_8.gj, out curp);
 									}
 									if (curp != null && !curp.Revealed)
 									{
-										await lf_RevealPuzzleAsync_33(CS_cl8_8.gj, curp, true);
+										await RevealPuzzleAsync(cl_8.gj, curp, true);
 									}
-									PuzzleItem puzzle = lf_PickPuzzleForSlot_0_29(puzzlePool, slot, usedIdx, activeIds);
-									await lf_PostPuzzleAsync_32(CS_cl8_8.gj, true, puzzle, slot);
+									PuzzleItem puzzle = PickPuzzleForSlot(puzzlePool, slot, usedIdx, activeIds);
+									await PostPuzzleAsync(cl_8.gj, true, puzzle, slot);
 									sentSlots.Add(slotKey);
-									lf_SavePuzzleDailyState_0_28(puzzleDailyStatePath, sentSlots, today);
+									SavePuzzleDailyState(puzzleDailyStatePath, sentSlots, today);
 									activeIds = null;
 									curp = null;
 								}
@@ -220,7 +235,7 @@ public class Program
 						}
 						foreach (var (jid, ap) in due)
 						{
-							await lf_RevealPuzzleAsync_33(jid, ap, true);
+							await RevealPuzzleAsync(jid, ap, true);
 						}
 					}
 				}
@@ -306,7 +321,7 @@ public class Program
 			});
 		}
 
-		internal bool lf_PanelAuthOk_12(HttpContext c)
+		internal bool PanelAuthOk(HttpContext c)
 		{
 			string adminApiToken = config.AdminApiToken;
 			if (string.IsNullOrEmpty(adminApiToken))
@@ -335,7 +350,7 @@ public class Program
 
 		internal IResult lam_14(HttpContext c)
 		{
-			return lf_PanelAuthOk_12(c) ? Results.Json(new
+			return PanelAuthOk(c) ? Results.Json(new
 			{
 				ok = true,
 				manageAll = config.ManageAllGroups,
@@ -344,15 +359,15 @@ public class Program
 					jid = kv.Key,
 					label = kv.Value.Label
 				}).ToList()
-			}) : lf_PanelDeny_0_13(c);
+			}) : PanelDeny(c);
 		}
 
 		internal IResult lam_15(HttpContext c, int? n)
 		{
 			IResult result;
-			if (!lf_PanelAuthOk_12(c))
+			if (!PanelAuthOk(c))
 			{
-				result = lf_PanelDeny_0_13(c);
+				result = PanelDeny(c);
 			}
 			else
 			{
@@ -477,12 +492,12 @@ public class Program
 
 		internal IResult lam_16(HttpContext c)
 		{
-			return lf_PanelAuthOk_12(c) ? Results.Content("<!doctype html><html lang=id><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">\r\n<title>WA Bot \\u2014 Admin</title><style>\r\nbody{font-family:system-ui,sans-serif;margin:0;background:#0f1216;color:#e6e6e6}\r\nheader{background:#16a34a;color:#fff;padding:12px 16px;font-weight:700}\r\n.wrap{padding:16px;max-width:900px;margin:auto}\r\n.card{background:#1a1f26;border:1px solid #2a2f37;border-radius:10px;padding:14px;margin:12px 0}\r\n.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}\r\n.metric{background:#11151a;border-radius:8px;padding:10px;text-align:center}\r\n.metric b{display:block;font-size:1.4rem;color:#16a34a}.metric span{font-size:.78rem;color:#9aa4af}\r\nbutton{background:#16a34a;color:#fff;border:0;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600;margin:2px}\r\nbutton.warn{background:#b45309}button.alt{background:#374151}\r\ninput,textarea{width:100%;box-sizing:border-box;background:#11151a;border:1px solid #2a2f37;color:#e6e6e6;border-radius:8px;padding:8px;margin:4px 0}\r\ntable{width:100%;border-collapse:collapse;font-size:.82rem}td,th{border-bottom:1px solid #2a2f37;padding:6px;text-align:left}\r\n.ok{color:#16a34a}.bad{color:#ef4444}pre{white-space:pre-wrap;font-size:.78rem;color:#9aa4af;max-height:240px;overflow:auto}\r\nh3{margin:.2rem 0 .6rem}</style></head><body>\r\n<header>\\U0001F916 WA Bot \\u2014 Panel Admin (lokal)</header><div class=wrap>\r\n<div class=card><h3>Status</h3><div class=grid id=metrics>memuat\\u2026</div></div>\r\n<div class=card><h3>Aksi cepat</h3>\r\n<input id=token placeholder=\"Token admin (untuk restart/broadcast)\">\r\n<div><button onclick=reload()>Reload config</button>\r\n<button class=alt onclick=\"restart('brain')\">Restart brain</button>\r\n<button class=alt onclick=\"restart('gateway')\">Restart gateway</button>\r\n<button class=warn onclick=\"restart('both')\">Restart both</button></div>\r\n<div id=msg></div></div>\r\n<div class=card><h3>Broadcast</h3>\r\n<input id=bjid placeholder=\"JID grup tujuan (mis. 1203...@g.us)\">\r\n<textarea id=btext placeholder=\"Isi pesan\"></textarea>\r\n<button onclick=broadcast()>Kirim broadcast</button></div>\r\n<div class=card><h3>Grup dikelola</h3><div id=groups>memuat\\u2026</div></div>\r\n<div class=card><h3>Audit moderasi terbaru</h3><pre id=audit>memuat\\u2026</pre></div></div>\r\n<script>\r\nconst $=s=>document.querySelector(s);\r\n$('#token').value=localStorage.getItem('wabotToken')||'';\r\n$('#token').oninput=e=>localStorage.setItem('wabotToken',e.target.value);\r\nasync function j(u,o){const r=await fetch(u,o);try{return await r.json()}catch{return{status:r.status}}}\r\nasync function refresh(){\r\n const s=await j('/stats');if(s.ok){$('#metrics').innerHTML=[\r\n  ['Gateway',s.gatewayConnected?'<span class=ok>OK</span>':'<span class=bad>OFF</span>'],\r\n  ['Terkirim',s.sent],['Gagal',s.failed],['Antre ulang',s.retryQueue],\r\n  ['Puzzle aktif',s.activePuzzles],['Moderasi/hari',s.moderatedToday],\r\n  ['Peringatan',s.warningsTracked],['Grup',s.managedGroups],['Aturan',s.rules],\r\n  ['Uptime(m)',s.uptimeMinutes],['Tidur',s.asleep?'ya':'tidak']\r\n ].map(m=>`<div class=metric><b>${m[1]}</b><span>${m[0]}</span></div>`).join('')}\r\n const g=await j('/admin/groups');$('#groups').innerHTML='<table><tr><th>Label</th><th>JID</th></tr>'+(g.groups||[]).map(x=>`<tr><td>${x.label||''}</td><td>${x.jid}</td></tr>`).join('')+'</table>';\r\n const a=await j('/admin/audit?n=15');$('#audit').textContent=(a.lines||[]).join('\\n')||'(belum ada)';}\r\nfunction note(t,ok){$('#msg').innerHTML=`<p class=\"${ok?'ok':'bad'}\">${t}</p>`}\r\nasync function reload(){const r=await j('/reload',{method:'POST'});note('Reload: '+(r.ok?'OK':'gagal'),r.ok);refresh()}\r\nasync function restart(t){const k=$('#token').value;if(!k)return note('Isi token dulu',false);note('Mengirim restart '+t+'\\u2026',true);await fetch(`/admin/restart?token=${encodeURIComponent(k)}&target=${t}`,{method:'POST'});setTimeout(()=>{note('Perintah restart '+t+' terkirim.',true);refresh()},1800)}\r\nasync function broadcast(){const k=$('#token').value,jid=$('#bjid').value,text=$('#btext').value;if(!k||!jid||!text)return note('Token, JID, teks wajib diisi',false);const r=await j('/broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:k,jid,text})});note('Broadcast: '+(r.ok?'terkirim \\u2705':('gagal \\u2014 '+(r.error||''))),r.ok)}\r\nrefresh();setInterval(refresh,5000);\r\n</script></body></html>", "text/html; charset=utf-8") : lf_PanelDeny_0_13(c);
+			return PanelAuthOk(c) ? Results.Content("<!doctype html><html lang=id><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">\r\n<title>WA Bot \\u2014 Admin</title><style>\r\nbody{font-family:system-ui,sans-serif;margin:0;background:#0f1216;color:#e6e6e6}\r\nheader{background:#16a34a;color:#fff;padding:12px 16px;font-weight:700}\r\n.wrap{padding:16px;max-width:900px;margin:auto}\r\n.card{background:#1a1f26;border:1px solid #2a2f37;border-radius:10px;padding:14px;margin:12px 0}\r\n.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}\r\n.metric{background:#11151a;border-radius:8px;padding:10px;text-align:center}\r\n.metric b{display:block;font-size:1.4rem;color:#16a34a}.metric span{font-size:.78rem;color:#9aa4af}\r\nbutton{background:#16a34a;color:#fff;border:0;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600;margin:2px}\r\nbutton.warn{background:#b45309}button.alt{background:#374151}\r\ninput,textarea{width:100%;box-sizing:border-box;background:#11151a;border:1px solid #2a2f37;color:#e6e6e6;border-radius:8px;padding:8px;margin:4px 0}\r\ntable{width:100%;border-collapse:collapse;font-size:.82rem}td,th{border-bottom:1px solid #2a2f37;padding:6px;text-align:left}\r\n.ok{color:#16a34a}.bad{color:#ef4444}pre{white-space:pre-wrap;font-size:.78rem;color:#9aa4af;max-height:240px;overflow:auto}\r\nh3{margin:.2rem 0 .6rem}</style></head><body>\r\n<header>\\U0001F916 WA Bot \\u2014 Panel Admin (lokal)</header><div class=wrap>\r\n<div class=card><h3>Status</h3><div class=grid id=metrics>memuat\\u2026</div></div>\r\n<div class=card><h3>Aksi cepat</h3>\r\n<input id=token placeholder=\"Token admin (untuk restart/broadcast)\">\r\n<div><button onclick=reload()>Reload config</button>\r\n<button class=alt onclick=\"restart('brain')\">Restart brain</button>\r\n<button class=alt onclick=\"restart('gateway')\">Restart gateway</button>\r\n<button class=warn onclick=\"restart('both')\">Restart both</button></div>\r\n<div id=msg></div></div>\r\n<div class=card><h3>Broadcast</h3>\r\n<input id=bjid placeholder=\"JID grup tujuan (mis. 1203...@g.us)\">\r\n<textarea id=btext placeholder=\"Isi pesan\"></textarea>\r\n<button onclick=broadcast()>Kirim broadcast</button></div>\r\n<div class=card><h3>Grup dikelola</h3><div id=groups>memuat\\u2026</div></div>\r\n<div class=card><h3>Audit moderasi terbaru</h3><pre id=audit>memuat\\u2026</pre></div></div>\r\n<script>\r\nconst $=s=>document.querySelector(s);\r\n$('#token').value=localStorage.getItem('wabotToken')||'';\r\n$('#token').oninput=e=>localStorage.setItem('wabotToken',e.target.value);\r\nasync function j(u,o){const r=await fetch(u,o);try{return await r.json()}catch{return{status:r.status}}}\r\nasync function refresh(){\r\n const s=await j('/stats');if(s.ok){$('#metrics').innerHTML=[\r\n  ['Gateway',s.gatewayConnected?'<span class=ok>OK</span>':'<span class=bad>OFF</span>'],\r\n  ['Terkirim',s.sent],['Gagal',s.failed],['Antre ulang',s.retryQueue],\r\n  ['Puzzle aktif',s.activePuzzles],['Moderasi/hari',s.moderatedToday],\r\n  ['Peringatan',s.warningsTracked],['Grup',s.managedGroups],['Aturan',s.rules],\r\n  ['Uptime(m)',s.uptimeMinutes],['Tidur',s.asleep?'ya':'tidak']\r\n ].map(m=>`<div class=metric><b>${m[1]}</b><span>${m[0]}</span></div>`).join('')}\r\n const g=await j('/admin/groups');$('#groups').innerHTML='<table><tr><th>Label</th><th>JID</th></tr>'+(g.groups||[]).map(x=>`<tr><td>${x.label||''}</td><td>${x.jid}</td></tr>`).join('')+'</table>';\r\n const a=await j('/admin/audit?n=15');$('#audit').textContent=(a.lines||[]).join('\\n')||'(belum ada)';}\r\nfunction note(t,ok){$('#msg').innerHTML=`<p class=\"${ok?'ok':'bad'}\">${t}</p>`}\r\nasync function reload(){const r=await j('/reload',{method:'POST'});note('Reload: '+(r.ok?'OK':'gagal'),r.ok);refresh()}\r\nasync function restart(t){const k=$('#token').value;if(!k)return note('Isi token dulu',false);note('Mengirim restart '+t+'\\u2026',true);await fetch(`/admin/restart?token=${encodeURIComponent(k)}&target=${t}`,{method:'POST'});setTimeout(()=>{note('Perintah restart '+t+' terkirim.',true);refresh()},1800)}\r\nasync function broadcast(){const k=$('#token').value,jid=$('#bjid').value,text=$('#btext').value;if(!k||!jid||!text)return note('Token, JID, teks wajib diisi',false);const r=await j('/broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:k,jid,text})});note('Broadcast: '+(r.ok?'terkirim \\u2705':('gagal \\u2014 '+(r.error||''))),r.ok)}\r\nrefresh();setInterval(refresh,5000);\r\n</script></body></html>", "text/html; charset=utf-8") : PanelDeny(c);
 		}
 
 		internal IResult lam_17()
 		{
-			lf_ReloadRuntimeConfig_34("manual /reload");
+			ReloadRuntimeConfig("manual /reload");
 			return Results.Json(new
 			{
 				ok = true,
@@ -577,9 +592,9 @@ public class Program
 
 		internal async Task<IResult> lam_20()
 		{
-			DC_0_3 CS_cl8_13 = new DC_0_3
+			DC_0_3 cl_13 = new DC_0_3
 			{
-				CS_cl8_1 = this
+				cl_1 = this
 			};
 			AnnouncerConfig announcer = config.Announcer;
 			if (announcer == null || !announcer.Enabled || string.IsNullOrWhiteSpace(config.Announcer.TeamId))
@@ -591,26 +606,26 @@ public class Program
 				});
 			}
 			List<SwissItem> list = await Announcer.Fetch(config, http, app.Logger);
-			CS_cl8_13.now = DateTimeOffset.UtcNow;
-			CS_cl8_13.reminders = config.Announcer.RemindersMinutes;
+			cl_13.now = DateTimeOffset.UtcNow;
+			cl_13.reminders = config.Announcer.RemindersMinutes;
 			var preview = list.OrderBy((SwissItem t) => t.StartsAt).Select(delegate(SwissItem t)
 			{
-				DC_0_4 CS_cl8_15 = new DC_0_4
+				DC_0_4 cl_15 = new DC_0_4
 				{
-					CS_cl8_2 = CS_cl8_13,
+					cl_2 = cl_13,
 					t = t
 				};
 				return new
 				{
-					Name = CS_cl8_15.t.Name,
-					Id = CS_cl8_15.t.Id,
-					minutesUntilStart = (int)(CS_cl8_15.t.StartsAt - CS_cl8_13.now).TotalMinutes,
-					dueNow = CS_cl8_13.reminders.Where(delegate(int T)
+					Name = cl_15.t.Name,
+					Id = cl_15.t.Id,
+					minutesUntilStart = (int)(cl_15.t.StartsAt - cl_13.now).TotalMinutes,
+					dueNow = cl_13.reminders.Where(delegate(int T)
 					{
-						double totalMinutes = (CS_cl8_15.t.StartsAt - CS_cl8_15.CS_cl8_2.now).TotalMinutes;
+						double totalMinutes = (cl_15.t.StartsAt - cl_15.cl_2.now).TotalMinutes;
 						return totalMinutes > 0.0 && totalMinutes <= (double)T && totalMinutes >= (double)(T - 60);
 					}).ToArray(),
-					sample = Announcer.BuildText(CS_cl8_13.CS_cl8_1.config, CS_cl8_15.t, (CS_cl8_13.reminders.Length != 0) ? CS_cl8_13.reminders[0] : 300)
+					sample = Announcer.BuildText(cl_13.cl_1.config, cl_15.t, (cl_13.reminders.Length != 0) ? cl_13.reminders[0] : 300)
 				};
 			});
 			return Results.Json(new
@@ -623,12 +638,12 @@ public class Program
 
 		internal async Task<IResult> lam_21(IncomingMessage msg)
 		{
-			DC_0_5 CS_cl8_278 = new DC_0_5
+			DC_0_5 cl_278 = new DC_0_5
 			{
-				CS_cl8_3 = this,
+				cl_3 = this,
 				msg = msg
 			};
-			if (string.IsNullOrWhiteSpace(CS_cl8_278.msg.Text))
+			if (string.IsNullOrWhiteSpace(cl_278.msg.Text))
 			{
 				return Results.Json(new
 				{
@@ -636,7 +651,7 @@ public class Program
 					action = "ignored"
 				});
 			}
-			if (string.IsNullOrWhiteSpace(CS_cl8_278.msg.Jid))
+			if (string.IsNullOrWhiteSpace(cl_278.msg.Jid))
 			{
 				return Results.Json(new
 				{
@@ -644,8 +659,8 @@ public class Program
 					action = "ignored"
 				});
 			}
-			config.Groups.TryGetValue(CS_cl8_278.msg.Jid, out CS_cl8_278.g);
-			bool isPrivate = CS_cl8_278.msg.Channel == "whatsapp" && !CS_cl8_278.msg.Jid.EndsWith("@g.us");
+			config.Groups.TryGetValue(cl_278.msg.Jid, out cl_278.g);
+			bool isPrivate = cl_278.msg.Channel == "whatsapp" && !cl_278.msg.Jid.EndsWith("@g.us");
 			PrivateChatConfig? privateChat = config.PrivateChat;
 			bool? obj;
 			if (privateChat == null)
@@ -655,7 +670,7 @@ public class Program
 			else
 			{
 				string[] consoleGroupJids = privateChat.ConsoleGroupJids;
-				obj = ((consoleGroupJids != null) ? new bool?(((ReadOnlySpan<string>)consoleGroupJids).Contains(CS_cl8_278.msg.Jid)) : ((bool?)null));
+				obj = ((consoleGroupJids != null) ? new bool?(((ReadOnlySpan<string>)consoleGroupJids).Contains(cl_278.msg.Jid)) : ((bool?)null));
 			}
 			bool? flag = obj;
 			bool isConsole = flag == true;
@@ -678,7 +693,7 @@ public class Program
 				num = 0;
 			}
 			bool dmAllowed = (byte)num != 0;
-			if (!config.ManageAllGroups && CS_cl8_278.g == null && CS_cl8_278.msg.Channel == "whatsapp" && !dmAllowed)
+			if (!config.ManageAllGroups && cl_278.g == null && cl_278.msg.Channel == "whatsapp" && !dmAllowed)
 			{
 				return Results.Json(new
 				{
@@ -686,16 +701,16 @@ public class Program
 					action = "unmanaged"
 				});
 			}
-			bool eCommands = CS_cl8_278.g?.CommandsEnabled ?? config.CommandsEnabled;
-			bool eFlood = CS_cl8_278.g?.FloodEnabled ?? config.FloodEnabled;
-			bool eModeration = CS_cl8_278.g?.ModerationEnabled ?? config.ModerationEnabled;
-			string trimmedText = CS_cl8_278.msg.Text.TrimStart();
+			bool eCommands = cl_278.g?.CommandsEnabled ?? config.CommandsEnabled;
+			bool eFlood = cl_278.g?.FloodEnabled ?? config.FloodEnabled;
+			bool eModeration = cl_278.g?.ModerationEnabled ?? config.ModerationEnabled;
+			string trimmedText = cl_278.msg.Text.TrimStart();
 			string cmdText = Regex.Replace(trimmedText, "^(\\s*@\\d+\\s*)+", "").TrimStart();
 			bool isCommand = cmdText.StartsWith(config.CommandPrefix);
 			string cmdName = (isCommand ? cmdText.Substring(config.CommandPrefix.Length).TrimStart().Split(' ', 2)[0].ToLowerInvariant() : "");
-			if (!isCommand && (CS_cl8_278.g?.CommandsEnabled ?? config.CommandsEnabled))
+			if (!isCommand && (cl_278.g?.CommandsEnabled ?? config.CommandsEnabled))
 			{
-				string natCmd = NaturalIntent.Detect(config, cmdText, CS_cl8_278.msg.MentionedBot);
+				string natCmd = NaturalIntent.Detect(config, cmdText, cl_278.msg.MentionedBot);
 				if (natCmd != null)
 				{
 					isCommand = true;
@@ -703,26 +718,26 @@ public class Program
 					cmdName = natCmd.Split(' ', 2)[0].ToLowerInvariant();
 				}
 			}
-			string senderNum = NumberUtil.Normalize(CS_cl8_278.msg.Participant);
-			string senderPhone = NumberUtil.Normalize(CS_cl8_278.msg.ParticipantPhone);
-			HashSet<string> groupExemptSet = (from text5 in (CS_cl8_278.g?.ExemptNumbers ?? Array.Empty<string>()).Select(NumberUtil.Normalize)
+			string senderNum = NumberUtil.Normalize(cl_278.msg.Participant);
+			string senderPhone = NumberUtil.Normalize(cl_278.msg.ParticipantPhone);
+			HashSet<string> groupExemptSet = (from text5 in (cl_278.g?.ExemptNumbers ?? Array.Empty<string>()).Select(NumberUtil.Normalize)
 				where text5.Length > 0
 				select text5).ToHashSet();
 			bool senderExempt = ModUtil.IdInSet(exempt, senderPhone, senderNum) || ModUtil.IdInSet(groupExemptSet, senderPhone, senderNum);
-			QuietHoursConfig quietCfg = CS_cl8_278.g?.QuietHours ?? config.QuietHours;
+			QuietHoursConfig quietCfg = cl_278.g?.QuietHours ?? config.QuietHours;
 			bool quietNow = QuietHours.IsActive(quietCfg, DateTimeOffset.UtcNow);
 			ConvContext ctx = new ConvContext
 			{
-				ConversationId = CS_cl8_278.msg.Jid,
-				SenderId = CS_cl8_278.msg.Participant,
+				ConversationId = cl_278.msg.Jid,
+				SenderId = cl_278.msg.Participant,
 				SenderNum = senderNum,
-				Channel = CS_cl8_278.msg.Channel,
-				Caps = Caps.Of(CS_cl8_278.msg.Channel),
+				Channel = cl_278.msg.Channel,
+				Caps = Caps.Of(cl_278.msg.Channel),
 				IsExempt = senderExempt,
 				QuietNow = quietNow,
-				GroupLabel = (CS_cl8_278.g?.Label ?? ""),
+				GroupLabel = (cl_278.g?.Label ?? ""),
 				WorkspaceName = (config.Workspace?.Name ?? ""),
-				Topic = TopicStore.Get(CS_cl8_278.msg.Jid)
+				Topic = TopicStore.Get(cl_278.msg.Jid)
 			};
 			string outBase = ChannelRoute.Base(config, ctx.Channel);
 			if (isCommand && (cmdName == "sleep" || cmdName == "wake"))
@@ -738,9 +753,9 @@ public class Program
 						});
 					}
 					Sleeper.Set(false);
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Judit Polica aktif lagi. Siap bertugas."
 					});
 					return Results.Json(new
@@ -749,9 +764,9 @@ public class Program
 						action = "wake"
 					});
 				}
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = "Baik, saya istirahat dulu. Admin bisa membangunkan dengan *!wake*."
 				});
 				Sleeper.Set(true);
@@ -769,10 +784,10 @@ public class Program
 					action = "asleep"
 				});
 			}
-			string paKey = CS_cl8_278.msg.Jid + "|" + senderNum;
+			string paKey = cl_278.msg.Jid + "|" + senderNum;
 			if (PendingAnalysis.Has(paKey))
 			{
-				string lowPa = CS_cl8_278.msg.Text.Trim().ToLowerInvariant();
+				string lowPa = cl_278.msg.Text.Trim().ToLowerInvariant();
 				bool enabled;
 				switch (lowPa)
 				{
@@ -812,7 +827,7 @@ public class Program
 					string placePa = PendingAnalysis.Take(paKey);
 					if (placePa != null)
 					{
-						lf_SendTyping_6(CS_cl8_278.msg.Jid, ctx.Channel);
+						SendTyping(cl_278.msg.Jid, ctx.Channel);
 						string fenPa = BoardVision.BuildFullFen(placePa, whitePa.Value);
 						ChessAnalysis.Output oPa = (await ChessAnalysis.Run(fenPa, config.Ai, http, app.Logger)) ?? new ChessAnalysis.Output("Gagal menganalisa.", "");
 						string imgPa = null;
@@ -828,17 +843,17 @@ public class Program
 						}
 						if (imgPa == null)
 						{
-							await lf_PostJson_0_40(http, outBase + "/send", new
+							await PostJson(http, outBase + "/send", new
 							{
-								jid = CS_cl8_278.msg.Jid,
+								jid = cl_278.msg.Jid,
 								text = "\ud83d\udcf7 " + oPa.Text
 							});
 						}
 						else
 						{
-							await lf_PostJson_0_40(http, outBase + "/send-image", new
+							await PostJson(http, outBase + "/send-image", new
 							{
-								jid = CS_cl8_278.msg.Jid,
+								jid = cl_278.msg.Jid,
 								path = imgPa,
 								caption = "\ud83d\udcf7 " + oPa.Text
 							});
@@ -851,7 +866,7 @@ public class Program
 					}
 				}
 			}
-			int cooldownSec = CS_cl8_278.g?.CommandCooldownSeconds ?? config.CommandCooldownSeconds;
+			int cooldownSec = cl_278.g?.CommandCooldownSeconds ?? config.CommandCooldownSeconds;
 			int num2;
 			AiConfig ai;
 			if (cooldownSec > 0 && !senderExempt)
@@ -861,7 +876,7 @@ public class Program
 					ai = config.Ai;
 					if (ai != null && ai.Enabled && ai.RequireMention)
 					{
-						num2 = (CS_cl8_278.msg.MentionedBot ? 1 : 0);
+						num2 = (cl_278.msg.MentionedBot ? 1 : 0);
 						goto IL_117f;
 					}
 				}
@@ -875,13 +890,13 @@ public class Program
 			string number;
 			int fcount;
 			string ftext = ftmpl.Replace("@user", "@" + number).Replace("{count}", fcount.ToString());
-			await lf_PostJson_0_40(http, outBase + "/send", new
+			await PostJson(http, outBase + "/send", new
 			{
-				jid = CS_cl8_278.msg.Jid,
+				jid = cl_278.msg.Jid,
 				text = ftext,
-				mentions = new string[1] { CS_cl8_278.msg.Participant }
+				mentions = new string[1] { cl_278.msg.Participant }
 			});
-			audit.Write(CS_cl8_278.msg.Jid, CS_cl8_278.msg.Participant, CS_cl8_278.msg.PushName, "flood", fcount, CS_cl8_278.msg.Text);
+			audit.Write(cl_278.msg.Jid, cl_278.msg.Participant, cl_278.msg.PushName, "flood", fcount, cl_278.msg.Text);
 			app.Logger.LogInformation("FLOOD dari {Number}, peringatan ke-{Count}", number, fcount);
 			return Results.Json(new
 			{
@@ -892,7 +907,7 @@ public class Program
 			});
 			IL_117f:
 			bool aiMention = (byte)num2 != 0;
-			if (isCommand && cmdName != "batal" && !cmdCooldown.Allow($"{CS_cl8_278.msg.Jid}|{senderNum}|{cmdName}", cooldownSec))
+			if (isCommand && cmdName != "batal" && !cmdCooldown.Allow($"{cl_278.msg.Jid}|{senderNum}|{cmdName}", cooldownSec))
 			{
 				return Results.Json(new
 				{
@@ -901,7 +916,7 @@ public class Program
 					cmd = cmdName
 				});
 			}
-			if (aiMention && !cmdCooldown.Allow(CS_cl8_278.msg.Jid + "|" + senderNum + "|@ai", cooldownSec))
+			if (aiMention && !cmdCooldown.Allow(cl_278.msg.Jid + "|" + senderNum + "|@ai", cooldownSec))
 			{
 				return Results.Json(new
 				{
@@ -912,7 +927,7 @@ public class Program
 			}
 			goto IL_12be;
 			IL_12be:
-			if (!isCommand && Regex.IsMatch(CS_cl8_278.msg.Text, "\\b(report|lapor|blokir|ban)\\b.*\\b(bot|nomor|number|wa)\\b|\\b(bot|nomor|number|wa)\\b.*\\b(report|lapor|blokir|ban)\\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+			if (!isCommand && Regex.IsMatch(cl_278.msg.Text, "\\b(report|lapor|blokir|ban)\\b.*\\b(bot|nomor|number|wa)\\b|\\b(bot|nomor|number|wa)\\b.*\\b(report|lapor|blokir|ban)\\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
 			{
 				if (quietNow)
 				{
@@ -922,9 +937,9 @@ public class Program
 						action = "quiet-antireport"
 					});
 				}
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = "Bot bermasalah? Jangan report nomor. Ketik " + config.CommandPrefix + "admin <kendala>."
 				});
 				return Results.Json(new
@@ -961,11 +976,11 @@ public class Program
 			Rule matched;
 			int count;
 			string warnText = warnTmpl.Replace("@user", "@" + number).Replace("{reason}", matched.Reason ?? matched.Name ?? "aturan grup").Replace("{count}", count.ToString());
-			await lf_PostJson_0_40(http, outBase + "/send", new
+			await PostJson(http, outBase + "/send", new
 			{
-				jid = CS_cl8_278.msg.Jid,
+				jid = cl_278.msg.Jid,
 				text = warnText,
-				mentions = new string[1] { CS_cl8_278.msg.Participant }
+				mentions = new string[1] { cl_278.msg.Participant }
 			});
 			goto IL_aa9d;
 			IL_195b:
@@ -974,9 +989,9 @@ public class Program
 			string replyDM;
 			if (isConsole)
 			{
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = replyDM
 				});
 				return Results.Json(new
@@ -988,9 +1003,9 @@ public class Program
 			string qDM;
 			if (!string.IsNullOrWhiteSpace(consoleJid))
 			{
-				string who = ((!string.IsNullOrWhiteSpace(CS_cl8_278.msg.PushName)) ? CS_cl8_278.msg.PushName : ("@" + senderNum));
+				string who = ((!string.IsNullOrWhiteSpace(cl_278.msg.PushName)) ? cl_278.msg.PushName : ("@" + senderNum));
 				string head = ((qDM.Length > 0) ? $"\ud83d\udce9 *DM dari {who}:* {qDM}\n\n" : ("\ud83d\udce9 *DM dari " + who + "*\n\n"));
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
 					jid = consoleJid,
 					text = head + replyDM
@@ -1002,8 +1017,8 @@ public class Program
 					consoleJid = consoleJid
 				});
 			}
-			string replyJidDM = ((senderPhone.Length > 0) ? (senderPhone + "@s.whatsapp.net") : CS_cl8_278.msg.Jid);
-			await lf_PostJson_0_40(http, outBase + "/send", new
+			string replyJidDM = ((senderPhone.Length > 0) ? (senderPhone + "@s.whatsapp.net") : cl_278.msg.Jid);
+			await PostJson(http, outBase + "/send", new
 			{
 				jid = replyJidDM,
 				text = replyDM
@@ -1015,7 +1030,7 @@ public class Program
 				replyJid = replyJidDM
 			});
 			IL_aa9d:
-			audit.Write(CS_cl8_278.msg.Jid, CS_cl8_278.msg.Participant, CS_cl8_278.msg.PushName, matched.Id, count, CS_cl8_278.msg.Text);
+			audit.Write(cl_278.msg.Jid, cl_278.msg.Participant, cl_278.msg.PushName, matched.Id, count, cl_278.msg.Text);
 			app.Logger.LogInformation("HAPUS dari {Number} (aturan {Rule}), peringatan ke-{Count}{Quiet}", number, matched.Id, count, quietNow ? " [jam tenang]" : "");
 			return Results.Json(new
 			{
@@ -1036,7 +1051,7 @@ public class Program
 						action = "dm-not-allowed"
 					});
 				}
-				if (cooldownSec > 0 && !cmdCooldown.Allow(CS_cl8_278.msg.Jid + "|dm", Math.Max(cooldownSec, 3)))
+				if (cooldownSec > 0 && !cmdCooldown.Allow(cl_278.msg.Jid + "|dm", Math.Max(cooldownSec, 3)))
 				{
 					return Results.Json(new
 					{
@@ -1052,8 +1067,8 @@ public class Program
 						action = "dm-quiet"
 					});
 				}
-				lf_SendTyping_6(CS_cl8_278.msg.Jid, ctx.Channel);
-				string memKeyDM = CS_cl8_278.msg.Jid + "|dm";
+				SendTyping(cl_278.msg.Jid, ctx.Channel);
+				string memKeyDM = cl_278.msg.Jid + "|dm";
 				string convDM = ConvMemory.Recent(memKeyDM);
 				string personaDM = (string.IsNullOrWhiteSpace(pcDM.Persona) ? "" : pcDM.Persona);
 				qDM = cmdText.Trim();
@@ -1095,9 +1110,9 @@ public class Program
 				goto IL_195b;
 			}
 			RelayConfig relay = config.Relay;
-			if (relay != null && relay.Enabled && CS_cl8_278.msg.Jid == config.Relay.HubGroupJid)
+			if (relay != null && relay.Enabled && cl_278.msg.Jid == config.Relay.HubGroupJid)
 			{
-				string sessKey = CS_cl8_278.msg.Participant;
+				string sessKey = cl_278.msg.Participant;
 				BroadcastSession sess;
 				lock (sessions.BroadcastLock)
 				{
@@ -1118,9 +1133,9 @@ public class Program
 					}
 					if (had)
 					{
-						await lf_PostJson_0_40(http, outBase + "/send", new
+						await PostJson(http, outBase + "/send", new
 						{
-							jid = CS_cl8_278.msg.Jid,
+							jid = cl_278.msg.Jid,
 							text = "Siap, proses sebar saya batalkan."
 						});
 					}
@@ -1134,9 +1149,9 @@ public class Program
 				{
 					if (!AdminSync.IsAllowed(config, senderNum, senderPhone))
 					{
-						await lf_PostJson_0_40(http, outBase + "/send", new
+						await PostJson(http, outBase + "/send", new
 						{
-							jid = CS_cl8_278.msg.Jid,
+							jid = cl_278.msg.Jid,
 							text = "Fitur sebar khusus admin."
 						});
 						return Results.Json(new
@@ -1149,16 +1164,16 @@ public class Program
 					string inlineText = ((cmdParts.Length > 1) ? cmdParts[1].Trim() : "");
 					if ((firstWord == "announcement" || firstWord == "umumkan") && inlineText.Length > 0)
 					{
-						DC_0_6 CS_cl8_261 = new DC_0_6
+						DC_0_6 cl_261 = new DC_0_6
 						{
-							CS_cl8_4 = CS_cl8_278,
+							cl_4 = cl_278,
 							targets = (config.Relay.TargetGroups ?? Array.Empty<string>()).Where((string value) => !string.IsNullOrWhiteSpace(value)).ToList()
 						};
-						if (CS_cl8_261.targets.Count == 0)
+						if (cl_261.targets.Count == 0)
 						{
-							await lf_PostJson_0_40(http, outBase + "/send", new
+							await PostJson(http, outBase + "/send", new
 							{
-								jid = CS_cl8_261.CS_cl8_4.msg.Jid,
+								jid = cl_261.cl_4.msg.Jid,
 								text = "Belum ada grup tujuan."
 							});
 							return Results.Json(new
@@ -1167,20 +1182,20 @@ public class Program
 								action = "announcement-notarget"
 							});
 						}
-						CS_cl8_261.outText = (string.IsNullOrWhiteSpace(config.Relay.Footer) ? inlineText : (inlineText + "\n\n" + config.Relay.Footer));
-						CS_cl8_261.throttleMs = Math.Max(0, config.Relay.ThrottleSeconds) * 1000;
-						CS_cl8_261.hubJid = CS_cl8_261.CS_cl8_4.msg.Jid;
+						cl_261.outText = (string.IsNullOrWhiteSpace(config.Relay.Footer) ? inlineText : (inlineText + "\n\n" + config.Relay.Footer));
+						cl_261.throttleMs = Math.Max(0, config.Relay.ThrottleSeconds) * 1000;
+						cl_261.hubJid = cl_261.cl_4.msg.Jid;
 						Task.Run(async delegate
 						{
 							int okCount = 0;
-							foreach (string tj in CS_cl8_261.targets)
+							foreach (string tj in cl_261.targets)
 							{
 								try
 								{
-									if (await lf_PostJson_0_40(CS_cl8_261.CS_cl8_4.CS_cl8_3.http, ChannelRoute.BaseForJid(CS_cl8_261.CS_cl8_4.CS_cl8_3.config, tj) + "/send", new
+									if (await PostJson(cl_261.cl_4.cl_3.http, ChannelRoute.BaseForJid(cl_261.cl_4.cl_3.config, tj) + "/send", new
 									{
 										jid = tj,
-										text = CS_cl8_261.outText
+										text = cl_261.outText
 									}))
 									{
 										okCount++;
@@ -1188,29 +1203,29 @@ public class Program
 								}
 								catch (Exception ex)
 								{
-									CS_cl8_261.CS_cl8_4.CS_cl8_3.app.Logger.LogError("Announcement gagal ke {Jid}: {Msg}", tj, ex.Message);
+									cl_261.cl_4.cl_3.app.Logger.LogError("Announcement gagal ke {Jid}: {Msg}", tj, ex.Message);
 								}
-								if (CS_cl8_261.throttleMs > 0)
+								if (cl_261.throttleMs > 0)
 								{
-									await Task.Delay(CS_cl8_261.throttleMs);
+									await Task.Delay(cl_261.throttleMs);
 								}
 							}
-							await lf_PostJson_0_40(CS_cl8_261.CS_cl8_4.CS_cl8_3.http, ChannelRoute.BaseForJid(CS_cl8_261.CS_cl8_4.CS_cl8_3.config, CS_cl8_261.hubJid) + "/send", new
+							await PostJson(cl_261.cl_4.cl_3.http, ChannelRoute.BaseForJid(cl_261.cl_4.cl_3.config, cl_261.hubJid) + "/send", new
 							{
-								jid = CS_cl8_261.hubJid,
-								text = $"Announcement terkirim ke {okCount}/{CS_cl8_261.targets.Count} grup."
+								jid = cl_261.hubJid,
+								text = $"Announcement terkirim ke {okCount}/{cl_261.targets.Count} grup."
 							});
 						});
-						await lf_PostJson_0_40(http, outBase + "/send", new
+						await PostJson(http, outBase + "/send", new
 						{
-							jid = CS_cl8_261.CS_cl8_4.msg.Jid,
-							text = $"Mengirim announcement ke {CS_cl8_261.targets.Count} grup..."
+							jid = cl_261.cl_4.msg.Jid,
+							text = $"Mengirim announcement ke {cl_261.targets.Count} grup..."
 						});
 						return Results.Json(new
 						{
 							ok = true,
 							action = "announcement-send",
-							targets = CS_cl8_261.targets.Count
+							targets = cl_261.targets.Count
 						});
 					}
 					lock (sessions.BroadcastLock)
@@ -1220,9 +1235,9 @@ public class Program
 							Stage = "text"
 						};
 					}
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Mau sebar pesan apa? Ketik pesannya. (!batal untuk batal)"
 					});
 					return Results.Json(new
@@ -1235,18 +1250,18 @@ public class Program
 				{
 					if (sess.Stage == "text")
 					{
-						List<GroupOption> opts = (await lf_FetchGroups_0_37(config.GatewayUrl, http)).Where((GroupOption o) => o.Jid != config.Relay.HubGroupJid && o.Jid.Length > 0).ToList();
+						List<GroupOption> opts = (await FetchGroups(config.GatewayUrl, http)).Where((GroupOption o) => o.Jid != config.Relay.HubGroupJid && o.Jid.Length > 0).ToList();
 						lock (sessions.BroadcastLock)
 						{
-							sess.Text = CS_cl8_278.msg.Text.Trim();
+							sess.Text = cl_278.msg.Text.Trim();
 							sess.Options = opts;
 							sess.Stage = "targets";
 							sess.CreatedAt = DateTimeOffset.UtcNow;
 						}
-						await lf_PostJson_0_40(http, outBase + "/send", new
+						await PostJson(http, outBase + "/send", new
 						{
-							jid = CS_cl8_278.msg.Jid,
-							text = lf_TargetPrompt_0_38(opts)
+							jid = cl_278.msg.Jid,
+							text = TargetPrompt(opts)
 						});
 						return Results.Json(new
 						{
@@ -1256,16 +1271,16 @@ public class Program
 					}
 					if (sess.Stage == "targets")
 					{
-						DC_0_7 CS_cl8_274 = new DC_0_7
+						DC_0_7 cl_274 = new DC_0_7
 						{
-							CS_cl8_5 = CS_cl8_278
+							cl_5 = cl_278
 						};
-						List<GroupOption> chosen = lf_ParseSelection_0_39(CS_cl8_274.CS_cl8_5.msg.Text, sess.Options);
+						List<GroupOption> chosen = ParseSelection(cl_274.cl_5.msg.Text, sess.Options);
 						if (chosen.Count == 0)
 						{
-							await lf_PostJson_0_40(http, outBase + "/send", new
+							await PostJson(http, outBase + "/send", new
 							{
-								jid = CS_cl8_274.CS_cl8_5.msg.Jid,
+								jid = cl_274.cl_5.msg.Jid,
 								text = "Saya belum menangkap pilihan. Balas nomor, semua, atau !batal."
 							});
 							return Results.Json(new
@@ -1279,60 +1294,60 @@ public class Program
 						{
 							sessions.Broadcast.Remove(sessKey);
 						}
-						CS_cl8_274.outText = (string.IsNullOrWhiteSpace(config.Relay.Footer) ? textToSend : (textToSend + "\n\n" + config.Relay.Footer));
-						CS_cl8_274.hubJid = CS_cl8_274.CS_cl8_5.msg.Jid;
-						CS_cl8_274.throttleMs = Math.Max(0, config.Relay.ThrottleSeconds) * 1000;
-						CS_cl8_274.targetJids = chosen.Select((GroupOption groupOption) => groupOption.Jid).ToList();
+						cl_274.outText = (string.IsNullOrWhiteSpace(config.Relay.Footer) ? textToSend : (textToSend + "\n\n" + config.Relay.Footer));
+						cl_274.hubJid = cl_274.cl_5.msg.Jid;
+						cl_274.throttleMs = Math.Max(0, config.Relay.ThrottleSeconds) * 1000;
+						cl_274.targetJids = chosen.Select((GroupOption groupOption) => groupOption.Jid).ToList();
 						Task.Run(async delegate
 						{
 							int okCount = 0;
-							foreach (string tj in CS_cl8_274.targetJids)
+							foreach (string tj in cl_274.targetJids)
 							{
 								try
 								{
-									if (await lf_PostJson_0_40(CS_cl8_274.CS_cl8_5.CS_cl8_3.http, ChannelRoute.BaseForJid(CS_cl8_274.CS_cl8_5.CS_cl8_3.config, tj) + "/send", new
+									if (await PostJson(cl_274.cl_5.cl_3.http, ChannelRoute.BaseForJid(cl_274.cl_5.cl_3.config, tj) + "/send", new
 									{
 										jid = tj,
-										text = CS_cl8_274.outText
+										text = cl_274.outText
 									}))
 									{
 										okCount++;
 									}
 									else
 									{
-										CS_cl8_274.CS_cl8_5.CS_cl8_3.app.Logger.LogWarning("Relay gagal (gateway tolak) ke {Jid}", tj);
+										cl_274.cl_5.cl_3.app.Logger.LogWarning("Relay gagal (gateway tolak) ke {Jid}", tj);
 									}
 								}
 								catch (Exception ex)
 								{
-									CS_cl8_274.CS_cl8_5.CS_cl8_3.app.Logger.LogError("Relay gagal ke {Jid}: {Msg}", tj, ex.Message);
+									cl_274.cl_5.cl_3.app.Logger.LogError("Relay gagal ke {Jid}: {Msg}", tj, ex.Message);
 								}
-								if (CS_cl8_274.throttleMs > 0)
+								if (cl_274.throttleMs > 0)
 								{
-									await Task.Delay(CS_cl8_274.throttleMs);
+									await Task.Delay(cl_274.throttleMs);
 								}
 							}
-							await lf_PostJson_0_40(CS_cl8_274.CS_cl8_5.CS_cl8_3.http, ChannelRoute.BaseForJid(CS_cl8_274.CS_cl8_5.CS_cl8_3.config, CS_cl8_274.hubJid) + "/send", new
+							await PostJson(cl_274.cl_5.cl_3.http, ChannelRoute.BaseForJid(cl_274.cl_5.cl_3.config, cl_274.hubJid) + "/send", new
 							{
-								jid = CS_cl8_274.hubJid,
-								text = $"Selesai menyebar ke {okCount}/{CS_cl8_274.targetJids.Count} grup."
+								jid = cl_274.hubJid,
+								text = $"Selesai menyebar ke {okCount}/{cl_274.targetJids.Count} grup."
 							});
 						});
-						await lf_PostJson_0_40(http, outBase + "/send", new
+						await PostJson(http, outBase + "/send", new
 						{
-							jid = CS_cl8_274.CS_cl8_5.msg.Jid,
-							text = $"Menyebar ke {CS_cl8_274.targetJids.Count} grup (jeda {config.Relay.ThrottleSeconds} dtk)..."
+							jid = cl_274.cl_5.msg.Jid,
+							text = $"Menyebar ke {cl_274.targetJids.Count} grup (jeda {config.Relay.ThrottleSeconds} dtk)..."
 						});
 						return Results.Json(new
 						{
 							ok = true,
 							action = "relay-send",
-							targets = CS_cl8_274.targetJids.Count
+							targets = cl_274.targetJids.Count
 						});
 					}
 				}
 			}
-			string ssKey = CS_cl8_278.msg.Jid + "|" + CS_cl8_278.msg.Participant;
+			string ssKey = cl_278.msg.Jid + "|" + cl_278.msg.Participant;
 			StandingsSession ss;
 			lock (sessions.StandingsLock)
 			{
@@ -1350,9 +1365,9 @@ public class Program
 				if (sp.Length > 1 && int.TryParse(sp[1].Trim(), out var sid))
 				{
 					string r = await CommandHandler.BuildStandings(sid, http, app.Logger);
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = r
 					});
 					return Results.Json(new
@@ -1364,9 +1379,9 @@ public class Program
 				List<(string url, string swiss, string name, string date)> recent = await CommandHandler.GetRecentTournaments(http, app.Logger, 5);
 				if (recent.Count == 0)
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Daftar belum terbaca. Coba " + config.CommandPrefix + "standings <id>."
 					});
 					return Results.Json(new
@@ -1396,9 +1411,9 @@ public class Program
 					stringBuilder2.AppendLine(ref handler);
 				}
 				sb.Append("(ketik !batal untuk membatalkan)");
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = sb.ToString()
 				});
 				return Results.Json(new
@@ -1413,9 +1428,9 @@ public class Program
 				{
 					sessions.Standings.Remove(ssKey);
 				}
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = "Siap, saya batalkan."
 				});
 				return Results.Json(new
@@ -1424,7 +1439,7 @@ public class Program
 					action = "standings-cancel"
 				});
 			}
-			if (ss != null && !isCommand && int.TryParse(CS_cl8_278.msg.Text.Trim(), out var pick) && pick >= 1 && pick <= ss.Options.Count)
+			if (ss != null && !isCommand && int.TryParse(cl_278.msg.Text.Trim(), out var pick) && pick >= 1 && pick <= ss.Options.Count)
 			{
 				(string url, string swiss, string name, string date) chosen2 = ss.Options[pick - 1];
 				lock (sessions.StandingsLock)
@@ -1432,9 +1447,9 @@ public class Program
 					sessions.Standings.Remove(ssKey);
 				}
 				string r2 = await CommandHandler.BuildStandingsSmart(chosen2.url, chosen2.swiss, chosen2.name, http, app.Logger);
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = r2
 				});
 				return Results.Json(new
@@ -1456,7 +1471,7 @@ public class Program
 			}
 			if (num5 != 0)
 			{
-				string csKey = CS_cl8_278.msg.Jid + "|" + CS_cl8_278.msg.Participant;
+				string csKey = cl_278.msg.Jid + "|" + cl_278.msg.Participant;
 				CclSession cs;
 				lock (sessions.CclLock)
 				{
@@ -1479,9 +1494,9 @@ public class Program
 					opts2.AddRange(past.Take(8));
 					if (opts2.Count == 0)
 					{
-						await lf_PostJson_0_40(http, outBase + "/send", new
+						await PostJson(http, outBase + "/send", new
 						{
-							jid = CS_cl8_278.msg.Jid,
+							jid = cl_278.msg.Jid,
 							text = "Daftar event belum bisa saya ambil sekarang. Silakan coba lagi nanti ya."
 						});
 						return Results.Json(new
@@ -1497,9 +1512,9 @@ public class Program
 							Options = opts2
 						};
 					}
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = Ccl.BuildList(config.Ccl, opts2)
 					});
 					return Results.Json(new
@@ -1514,9 +1529,9 @@ public class Program
 					{
 						sessions.Ccl.Remove(csKey);
 					}
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Siap, saya batalkan."
 					});
 					return Results.Json(new
@@ -1525,7 +1540,7 @@ public class Program
 						action = "ccl-cancel"
 					});
 				}
-				if (cs != null && !isCommand && int.TryParse(CS_cl8_278.msg.Text.Trim(), out var cpick) && cpick >= 1 && cpick <= cs.Options.Count)
+				if (cs != null && !isCommand && int.TryParse(cl_278.msg.Text.Trim(), out var cpick) && cpick >= 1 && cpick <= cs.Options.Count)
 				{
 					CclEvent chosen3 = cs.Options[cpick - 1];
 					lock (sessions.CclLock)
@@ -1533,9 +1548,9 @@ public class Program
 						sessions.Ccl.Remove(csKey);
 					}
 					string r3 = await Ccl.BuildView(config.Ccl, chosen3, http, app.Logger);
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = r3
 					});
 					return Results.Json(new
@@ -1567,7 +1582,7 @@ public class Program
 						aiQuestion = ((parts.Length > 1) ? parts[1].Trim() : "");
 					}
 				}
-				else if (config.Ai.RequireMention && CS_cl8_278.msg.MentionedBot)
+				else if (config.Ai.RequireMention && cl_278.msg.MentionedBot)
 				{
 					aiQuestion = cmdText.Trim();
 				}
@@ -1577,9 +1592,9 @@ public class Program
 					{
 						if (!string.IsNullOrWhiteSpace(config.QuietHours?.Notice))
 						{
-							await lf_PostJson_0_40(http, outBase + "/send", new
+							await PostJson(http, outBase + "/send", new
 							{
-								jid = CS_cl8_278.msg.Jid,
+								jid = cl_278.msg.Jid,
 								text = config.QuietHours.Notice
 							});
 						}
@@ -1589,9 +1604,9 @@ public class Program
 							action = "quiet-ai"
 						});
 					}
-					string asker = NumberUtil.Normalize(CS_cl8_278.msg.Participant);
-					lf_SendTyping_6(CS_cl8_278.msg.Jid, ctx.Channel);
-					string memKey = CS_cl8_278.msg.Jid + "|" + asker;
+					string asker = NumberUtil.Normalize(cl_278.msg.Participant);
+					SendTyping(cl_278.msg.Jid, ctx.Channel);
+					string memKey = cl_278.msg.Jid + "|" + asker;
 					string convHistory = ConvMemory.Recent(memKey);
 					string reply;
 					switch ((aiQuestion.Length != 0) ? ChatIntents.Classify(aiQuestion) : ChatIntent.Empty)
@@ -1605,7 +1620,7 @@ public class Program
 					case ChatIntent.Schedule:
 					{
 						string sched = await CommandHandler.BuildSchedule(config, http, app.Logger);
-						string hint = CS_cl8_278.g?.EventsHint ?? "Info & hasil turnamen: https://ligacatur.com/";
+						string hint = cl_278.g?.EventsHint ?? "Info & hasil turnamen: https://ligacatur.com/";
 						reply = sched + (string.IsNullOrWhiteSpace(hint) ? "" : ("\n\n" + hint));
 						break;
 					}
@@ -1631,7 +1646,7 @@ public class Program
 						ConvMemory.Append(memKey, "user", aiQuestion);
 						ConvMemory.Append(memKey, "assistant", reply);
 					}
-					string jid = CS_cl8_278.msg.Jid;
+					string jid = cl_278.msg.Jid;
 					ChatIntent chatIntent = ChatIntents.Classify(aiQuestion);
 					if (1 == 0)
 					{
@@ -1647,11 +1662,11 @@ public class Program
 					{
 					}
 					TopicStore.Set(jid, topic);
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "@" + asker + " " + reply,
-						mentions = new string[1] { CS_cl8_278.msg.Participant }
+						mentions = new string[1] { cl_278.msg.Participant }
 					});
 					return Results.Json(new
 					{
@@ -1742,9 +1757,9 @@ public class Program
 				handler.AppendLiteral("• Admin terdaftar (!sebar): ");
 				handler.AppendFormatted(config.AdminNumbers.Length);
 				stringBuilder11.Append(ref handler);
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = st.ToString()
 				});
 				return Results.Json(new
@@ -1763,7 +1778,7 @@ public class Program
 						action = "warnings-denied"
 					});
 				}
-				List<(string num, int count)> top = warnings.TopForGroup(CS_cl8_278.msg.Jid, 10);
+				List<(string num, int count)> top = warnings.TopForGroup(cl_278.msg.Jid, 10);
 				StringBuilder wb = new StringBuilder();
 				wb.AppendLine("*Catatan moderasi terbanyak (grup ini)*");
 				StringBuilder stringBuilder;
@@ -1803,9 +1818,9 @@ public class Program
 				handler.AppendFormatted(config.CommandPrefix);
 				handler.AppendLiteral("percaya (balas pesan) untuk membuka akses/reset catatan.");
 				stringBuilder13.Append(ref handler);
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = wb.ToString()
 				});
 				return Results.Json(new
@@ -1830,9 +1845,9 @@ public class Program
 				{
 					body = body.Substring(body.Length - 3500);
 				}
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = "\ud83d\udcdc *Audit moderasi (terbaru)*\n" + body
 				});
 				return Results.Json(new
@@ -1852,9 +1867,9 @@ public class Program
 					});
 				}
 				string rep = ModerationReport.Build(audit, config, DateTime.Now.AddHours(-24.0));
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = rep
 				});
 				return Results.Json(new
@@ -1873,11 +1888,11 @@ public class Program
 						action = "percaya-denied"
 					});
 				}
-				if (string.IsNullOrWhiteSpace(CS_cl8_278.msg.QuotedAuthor))
+				if (string.IsNullOrWhiteSpace(cl_278.msg.QuotedAuthor))
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Cara pakai: balas (reply) pesan anggota yang ingin dibuka aksesnya, lalu ketik " + config.CommandPrefix + "percaya. Bot akan membuka akses awalnya dan merapikan catatan moderasinya."
 					});
 					return Results.Json(new
@@ -1886,14 +1901,14 @@ public class Program
 						action = "percaya-noquote"
 					});
 				}
-				string targetNum = NumberUtil.Normalize(CS_cl8_278.msg.QuotedAuthor);
+				string targetNum = NumberUtil.Normalize(cl_278.msg.QuotedAuthor);
 				bool wasProbation = joins.Clear(targetNum);
-				bool hadWarn = warnings.Reset(CS_cl8_278.msg.Jid + "|" + CS_cl8_278.msg.QuotedAuthor);
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				bool hadWarn = warnings.Reset(cl_278.msg.Jid + "|" + cl_278.msg.QuotedAuthor);
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = $"{targetNum} sudah ditandai aman - {(wasProbation ? "akses awal dibuka" : "akses sudah normal")}, {(hadWarn ? "catatan moderasi direset" : "tidak ada catatan moderasi")}.",
-					mentions = new string[1] { CS_cl8_278.msg.QuotedAuthor }
+					mentions = new string[1] { cl_278.msg.QuotedAuthor }
 				});
 				app.Logger.LogInformation("PERCAYA {Target} oleh admin {Admin}", targetNum, senderNum);
 				return Results.Json(new
@@ -1908,9 +1923,9 @@ public class Program
 				string laporTo = ((!string.IsNullOrWhiteSpace(config.LaporGroupJid)) ? config.LaporGroupJid : (config.Relay?.HubGroupJid ?? ""));
 				if (string.IsNullOrWhiteSpace(laporTo))
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Fitur lapor belum siap karena grup admin tujuan belum diset."
 					});
 					return Results.Json(new
@@ -1923,12 +1938,12 @@ public class Program
 				string note = ((lp.Length > 1) ? lp[1].Trim() : "");
 				StringBuilder stringBuilder;
 				StringBuilder.AppendInterpolatedStringHandler handler;
-				if (string.IsNullOrWhiteSpace(CS_cl8_278.msg.QuotedText))
+				if (string.IsNullOrWhiteSpace(cl_278.msg.QuotedText))
 				{
 					if (cmdName == "admin")
 					{
-						string reporter0 = NumberUtil.Normalize(CS_cl8_278.msg.Participant);
-						string grpLabel0 = CS_cl8_278.g?.Label ?? CS_cl8_278.msg.Jid;
+						string reporter0 = NumberUtil.Normalize(cl_278.msg.Participant);
+						string grpLabel0 = cl_278.g?.Label ?? cl_278.msg.Jid;
 						StringBuilder call = new StringBuilder();
 						call.AppendLine("\ud83d\udea8 *Admin dipanggil anggota*");
 						stringBuilder = call;
@@ -1941,7 +1956,7 @@ public class Program
 						StringBuilder stringBuilder15 = stringBuilder;
 						handler = new StringBuilder.AppendInterpolatedStringHandler(14, 2, stringBuilder);
 						handler.AppendLiteral("Pemanggil: ");
-						handler.AppendFormatted(CS_cl8_278.msg.PushName);
+						handler.AppendFormatted(cl_278.msg.PushName);
 						handler.AppendLiteral(" (");
 						handler.AppendFormatted(reporter0);
 						handler.AppendLiteral(")");
@@ -1955,14 +1970,14 @@ public class Program
 							handler.AppendFormatted(note);
 							stringBuilder16.AppendLine(ref handler);
 						}
-						await lf_PostJson_0_40(http, ChannelRoute.BaseForJid(config, laporTo) + "/send", new
+						await PostJson(http, ChannelRoute.BaseForJid(config, laporTo) + "/send", new
 						{
 							jid = laporTo,
 							text = call.ToString()
 						});
-						await lf_PostJson_0_40(http, outBase + "/send", new
+						await PostJson(http, outBase + "/send", new
 						{
-							jid = CS_cl8_278.msg.Jid,
+							jid = cl_278.msg.Jid,
 							text = "Admin sudah saya panggil. Jelaskan singkat ya."
 						});
 						return Results.Json(new
@@ -1971,9 +1986,9 @@ public class Program
 							action = "admin-called"
 						});
 					}
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = $"Report pesan: reply lalu {config.CommandPrefix}lapor. Panggil admin: {config.CommandPrefix}admin <catatan>."
 					});
 					return Results.Json(new
@@ -1982,10 +1997,10 @@ public class Program
 						action = "lapor-noquote"
 					});
 				}
-				string reporter1 = NumberUtil.Normalize(CS_cl8_278.msg.Participant);
-				string reported = NumberUtil.Normalize(CS_cl8_278.msg.QuotedAuthor);
-				string snippet = ((CS_cl8_278.msg.QuotedText.Length > 400) ? (CS_cl8_278.msg.QuotedText.Substring(0, 400) + "…") : CS_cl8_278.msg.QuotedText);
-				string grpLabel1 = CS_cl8_278.g?.Label ?? CS_cl8_278.msg.Jid;
+				string reporter1 = NumberUtil.Normalize(cl_278.msg.Participant);
+				string reported = NumberUtil.Normalize(cl_278.msg.QuotedAuthor);
+				string snippet = ((cl_278.msg.QuotedText.Length > 400) ? (cl_278.msg.QuotedText.Substring(0, 400) + "…") : cl_278.msg.QuotedText);
+				string grpLabel1 = cl_278.g?.Label ?? cl_278.msg.Jid;
 				StringBuilder rep2 = new StringBuilder();
 				rep2.AppendLine("\ud83d\udea9 *Laporan dari anggota*");
 				stringBuilder = rep2;
@@ -1998,7 +2013,7 @@ public class Program
 				StringBuilder stringBuilder18 = stringBuilder;
 				handler = new StringBuilder.AppendInterpolatedStringHandler(12, 2, stringBuilder);
 				handler.AppendLiteral("Pelapor: ");
-				handler.AppendFormatted(CS_cl8_278.msg.PushName);
+				handler.AppendFormatted(cl_278.msg.PushName);
 				handler.AppendLiteral(" (");
 				handler.AppendFormatted(reporter1);
 				handler.AppendLiteral(")");
@@ -2029,14 +2044,14 @@ public class Program
 				handler.AppendFormatted(snippet);
 				handler.AppendLiteral("”");
 				stringBuilder21.Append(ref handler);
-				await lf_PostJson_0_40(http, ChannelRoute.BaseForJid(config, laporTo) + "/send", new
+				await PostJson(http, ChannelRoute.BaseForJid(config, laporTo) + "/send", new
 				{
 					jid = laporTo,
 					text = rep2.ToString()
 				});
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = "Terima kasih, laporanmu sudah diteruskan ke admin. \ud83d\ude4f"
 				});
 				return Results.Json(new
@@ -2056,13 +2071,13 @@ public class Program
 			{
 				num8 = 0;
 			}
-			if (((uint)num8 & (eCommands ? 1u : 0u) & (isCommand ? 1u : 0u)) != 0 && cmdName == pzc.Command && (CS_cl8_278.g?.PuzzleCommandEnabled ?? pzc.CommandEnabled))
+			if (((uint)num8 & (eCommands ? 1u : 0u) & (isCommand ? 1u : 0u)) != 0 && cmdName == pzc.Command && (cl_278.g?.PuzzleCommandEnabled ?? pzc.CommandEnabled))
 			{
 				if (puzzlePool.Count == 0)
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Puzzle belum siap. Coba lagi nanti."
 					});
 					return Results.Json(new
@@ -2074,13 +2089,13 @@ public class Program
 				ActivePuzzle cur;
 				lock (puzzleLock)
 				{
-					activePuzzles.TryGetValue(CS_cl8_278.msg.Jid, out cur);
+					activePuzzles.TryGetValue(cl_278.msg.Jid, out cur);
 				}
 				if (cur != null && !cur.Revealed)
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Puzzle masih berjalan. Balas langkahmu, atau ketik " + config.CommandPrefix + pzc.SolveCommand + " nanti."
 					});
 					return Results.Json(new
@@ -2091,15 +2106,15 @@ public class Program
 				}
 				if (cur != null && cur.Revealed && (DateTime.UtcNow - cur.SolvedAt).TotalSeconds < 12.0)
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new { jid = CS_cl8_278.msg.Jid, text = "Puzzle barusan selesai. Santai dulu sebentar ya — ketik " + config.CommandPrefix + "peringkat untuk papan skor." });
+					await PostJson(http, outBase + "/send", new { jid = cl_278.msg.Jid, text = "Puzzle barusan selesai. Santai dulu sebentar ya — ketik " + config.CommandPrefix + "peringkat untuk papan skor." });
 					return Results.Json(new { ok = true, action = "puzzle-cooldown" });
 				}
-				if (!cmdCooldown.Allow(CS_cl8_278.msg.Jid + "|pznew", 12))
+				if (!cmdCooldown.Allow(cl_278.msg.Jid + "|pznew", 12))
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new { jid = CS_cl8_278.msg.Jid, text = "Sabar ya, puzzle baru bisa diminta tiap beberapa detik. Coba lagi sebentar." });
+					await PostJson(http, outBase + "/send", new { jid = cl_278.msg.Jid, text = "Sabar ya, puzzle baru bisa diminta tiap beberapa detik. Coba lagi sebentar." });
 					return Results.Json(new { ok = true, action = "puzzle-ratelimited" });
 				}
-				await lf_PostPuzzleAsync_32(CS_cl8_278.msg.Jid, false, null, PuzzleMove.DifficultySlot(cmdText, pzc.RevealMinutes));
+				await PostPuzzleAsync(cl_278.msg.Jid, false, null, PuzzleMove.DifficultySlot(cmdText, pzc.RevealMinutes));
 				return Results.Json(new
 				{
 					ok = true,
@@ -2122,25 +2137,25 @@ public class Program
 				ActivePuzzle ap;
 				lock (puzzleLock)
 				{
-					activePuzzles.TryGetValue(CS_cl8_278.msg.Jid, out ap);
+					activePuzzles.TryGetValue(cl_278.msg.Jid, out ap);
 				}
 				if (ap == null)
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Belum ada puzzle aktif. Mulai: " + config.CommandPrefix + zc2.Command + "."
 					});
 				}
-				else if (ap.Revealed || ap.WrongCount >= 6 || !(DateTimeOffset.UtcNow.UtcDateTime < ap.PostedAt.AddMinutes(CS_cl8_278.g?.PuzzleSolveAfterMinutes ?? zc2.SolveAfterMinutes)))
+				else if (ap.Revealed || ap.WrongCount >= 6 || !(DateTimeOffset.UtcNow.UtcDateTime < ap.PostedAt.AddMinutes(cl_278.g?.PuzzleSolveAfterMinutes ?? zc2.SolveAfterMinutes)))
 				{
-					await lf_RevealPuzzleAsync_33(CS_cl8_278.msg.Jid, ap, false);
+					await RevealPuzzleAsync(cl_278.msg.Jid, ap, false);
 				}
 				else
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = zc2.TryHarderMessage
 					});
 				}
@@ -2185,7 +2200,7 @@ public class Program
 			}
 			if (num11 != 0)
 			{
-				List<PuzzleScoreStore.PlayerScore> top2 = PuzzleScoreStore.Top(CS_cl8_278.msg.Jid, 10);
+				List<PuzzleScoreStore.PlayerScore> top2 = PuzzleScoreStore.Top(cl_278.msg.Jid, 10);
 				string text;
 				if (top2.Count == 0)
 				{
@@ -2216,9 +2231,9 @@ public class Program
 					sb2.Append("\nKetik langkah saat puzzle harian untuk naik peringkat ♟\ufe0f");
 					text = sb2.ToString();
 				}
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = text
 				});
 				return Results.Json(new
@@ -2248,10 +2263,10 @@ public class Program
 						action = "reset-denied"
 					});
 				}
-				bool had2 = PuzzleScoreStore.Reset(CS_cl8_278.msg.Jid);
-				await lf_PostJson_0_40(http, outBase + "/send", new
+				bool had2 = PuzzleScoreStore.Reset(cl_278.msg.Jid);
+				await PostJson(http, outBase + "/send", new
 				{
-					jid = CS_cl8_278.msg.Jid,
+					jid = cl_278.msg.Jid,
 					text = (had2 ? "Papan peringkat puzzle grup ini sudah direset. \ud83e\uddf9" : "Belum ada skor untuk direset.")
 				});
 				return Results.Json(new
@@ -2283,9 +2298,9 @@ public class Program
 			{
 				if (!StockfishEngine.Available)
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = "Engine analisa belum siap di server."
 					});
 					return Results.Json(new
@@ -2294,7 +2309,7 @@ public class Program
 						action = "analisa-noengine"
 					});
 				}
-				if (!cmdCooldown.Allow(CS_cl8_278.msg.Jid + "|" + senderNum + "|analisa", 8))
+				if (!cmdCooldown.Allow(cl_278.msg.Jid + "|" + senderNum + "|analisa", 8))
 				{
 					return Results.Json(new
 					{
@@ -2302,14 +2317,14 @@ public class Program
 						action = "analisa-cooldown"
 					});
 				}
-				string rawAn = CS_cl8_278.msg.Text.TrimStart();
+				string rawAn = cl_278.msg.Text.TrimStart();
 				int spAn = rawAn.IndexOfAny(new char[4] { ' ', '\n', '\r', '\t' });
 				string argAn = ((spAn >= 0) ? rawAn.Substring(spAn + 1).Trim() : "");
 				string noteAn = "";
 				if (!argAn.Contains('/') && argAn.Length <= 15)
 				{
 					JsonElement kAn;
-					string mediaId = ((!(CS_cl8_278.msg.MediaType == "image")) ? ((CS_cl8_278.msg.QuotedId.Length > 0) ? CS_cl8_278.msg.QuotedId : "") : ((CS_cl8_278.msg.Key.ValueKind == JsonValueKind.Object && CS_cl8_278.msg.Key.TryGetProperty("id", out kAn)) ? (kAn.GetString() ?? "") : ""));
+					string mediaId = ((!(cl_278.msg.MediaType == "image")) ? ((cl_278.msg.QuotedId.Length > 0) ? cl_278.msg.QuotedId : "") : ((cl_278.msg.Key.ValueKind == JsonValueKind.Object && cl_278.msg.Key.TryGetProperty("id", out kAn)) ? (kAn.GetString() ?? "") : ""));
 					if (mediaId.Length > 0)
 					{
 						string al = argAn.ToLowerInvariant();
@@ -2347,9 +2362,9 @@ public class Program
 						}
 						if (imgBytes == null)
 						{
-							await lf_PostJson_0_40(http, outBase + "/send", new
+							await PostJson(http, outBase + "/send", new
 							{
-								jid = CS_cl8_278.msg.Jid,
+								jid = cl_278.msg.Jid,
 								text = "Tak bisa ambil gambarnya. Kirim ulang gambar papan + caption !analisa ya."
 							});
 							return Results.Json(new
@@ -2361,9 +2376,9 @@ public class Program
 						string placement = BoardVision.RecognizeFen(imgBytes, pieceAssetsDir);
 						if (placement == null)
 						{
-							await lf_PostJson_0_40(http, outBase + "/send", new
+							await PostJson(http, outBase + "/send", new
 							{
-								jid = CS_cl8_278.msg.Jid,
+								jid = cl_278.msg.Jid,
 								text = "Gagal membaca papan dari gambar. Pastikan screenshot papan (Lichess/Chess.com) yang jelas, hanya papannya."
 							});
 							return Results.Json(new
@@ -2374,7 +2389,7 @@ public class Program
 						}
 						if (!sideGiven)
 						{
-							PendingAnalysis.Set(CS_cl8_278.msg.Jid + "|" + senderNum, placement);
+							PendingAnalysis.Set(cl_278.msg.Jid + "|" + senderNum, placement);
 							string imgAsk = null;
 							try
 							{
@@ -2386,17 +2401,17 @@ public class Program
 							string ask = "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(kalau ada bidak salah baca, kirim FEN-nya)";
 							if (imgAsk == null)
 							{
-								await lf_PostJson_0_40(http, outBase + "/send", new
+								await PostJson(http, outBase + "/send", new
 								{
-									jid = CS_cl8_278.msg.Jid,
+									jid = cl_278.msg.Jid,
 									text = ask
 								});
 							}
 							else
 							{
-								await lf_PostJson_0_40(http, outBase + "/send-image", new
+								await PostJson(http, outBase + "/send-image", new
 								{
-									jid = CS_cl8_278.msg.Jid,
+									jid = cl_278.msg.Jid,
 									path = imgAsk,
 									caption = ask
 								});
@@ -2412,9 +2427,9 @@ public class Program
 					}
 					else if (argAn.Length == 0)
 					{
-						await lf_PostJson_0_40(http, outBase + "/send", new
+						await PostJson(http, outBase + "/send", new
 						{
-							jid = CS_cl8_278.msg.Jid,
+							jid = cl_278.msg.Jid,
 							text = "Kirim *FEN*/*PGN*, atau kirim *GAMBAR* papan (screenshot Lichess/Chess.com) dengan caption *!analisa* (tambah 'hitam' kalau giliran Hitam)."
 						});
 						return Results.Json(new
@@ -2424,7 +2439,7 @@ public class Program
 						});
 					}
 				}
-				lf_SendTyping_6(CS_cl8_278.msg.Jid, ctx.Channel);
+				SendTyping(cl_278.msg.Jid, ctx.Channel);
 				ChessAnalysis.Output outp = (await ChessAnalysis.Run(argAn, config.Ai, http, app.Logger)) ?? new ChessAnalysis.Output("Gagal menganalisa.", "");
 				string capAn = noteAn + outp.Text;
 				string imgAn = null;
@@ -2440,17 +2455,17 @@ public class Program
 				}
 				if (imgAn == null)
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = capAn
 					});
 				}
 				else
 				{
-					await lf_PostJson_0_40(http, outBase + "/send-image", new
+					await PostJson(http, outBase + "/send-image", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						path = imgAn,
 						caption = capAn
 					});
@@ -2477,17 +2492,17 @@ public class Program
 				ActivePuzzle pap;
 				lock (puzzleLock)
 				{
-					if (CS_cl8_278.msg.QuotedId.Length > 0 && puzzleByMsg.TryGetValue(CS_cl8_278.msg.QuotedId, out ActivePuzzle byMsg))
+					if (cl_278.msg.QuotedId.Length > 0 && puzzleByMsg.TryGetValue(cl_278.msg.QuotedId, out ActivePuzzle byMsg))
 					{
 						pap = byMsg;
 					}
 					else
 					{
-						activePuzzles.TryGetValue(CS_cl8_278.msg.Jid, out pap);
+						activePuzzles.TryGetValue(cl_278.msg.Jid, out pap);
 					}
 				}
 				JsonElement _idEl;
-				string inMsgId = ((CS_cl8_278.msg.Key.ValueKind == JsonValueKind.Object && CS_cl8_278.msg.Key.TryGetProperty("id", out _idEl)) ? (_idEl.GetString() ?? "") : "");
+				string inMsgId = ((cl_278.msg.Key.ValueKind == JsonValueKind.Object && cl_278.msg.Key.TryGetProperty("id", out _idEl)) ? (_idEl.GetString() ?? "") : "");
 				if (pap != null && !pap.Revealed && pap.Puzzle.SolutionSan.Length != 0)
 				{
 					string[] sol = pap.Puzzle.SolutionSan;
@@ -2522,18 +2537,18 @@ public class Program
 								if (!pap.SolverNums.Contains(senderNum))
 								{
 									pap.SolverNums.Add(senderNum);
-									pap.SolverJids.Add(CS_cl8_278.msg.Participant);
+									pap.SolverJids.Add(cl_278.msg.Participant);
 								}
 							}
-							lf_SaveActivePuzzles_30();
+							SaveActivePuzzles();
 							int pts = PuzzleScoreStore.Tier(pap.Puzzle.Rating);
-							PuzzleScoreStore.Award(CS_cl8_278.msg.Jid, senderNum, CS_cl8_278.msg.PushName, pts, done);
+							PuzzleScoreStore.Award(cl_278.msg.Jid, senderNum, cl_278.msg.PushName, pts, done);
 							try
 							{
-								await lf_PostJson_0_40(http, outBase + "/react", new
+								await PostJson(http, outBase + "/react", new
 								{
-									jid = CS_cl8_278.msg.Jid,
-									key = CS_cl8_278.msg.Key,
+									jid = cl_278.msg.Jid,
+									key = cl_278.msg.Key,
 									emoji = (done ? "\ud83c\udf89" : "✅")
 								});
 							}
@@ -2543,7 +2558,7 @@ public class Program
 							if (done)
 							{
 								List<string> helperNums = new List<string>();
-								List<string> mentionList = new List<string> { CS_cl8_278.msg.Participant };
+								List<string> mentionList = new List<string> { cl_278.msg.Participant };
 								lock (puzzleLock)
 								{
 									for (int i4 = 0; i4 < pap.SolverNums.Count; i4++)
@@ -2556,7 +2571,7 @@ public class Program
 									}
 								}
 								string credit = ((helperNums.Count > 0) ? ("\nDibantu " + string.Join(" ", helperNums.Select((string h) => "@" + h)) + " \ud83d\udc4f") : "");
-								List<PuzzleScoreStore.PlayerScore> topN = PuzzleScoreStore.Top(CS_cl8_278.msg.Jid, 3);
+								List<PuzzleScoreStore.PlayerScore> topN = PuzzleScoreStore.Top(cl_278.msg.Jid, 3);
 								string board = "";
 								if (topN.Count > 0)
 								{
@@ -2570,9 +2585,9 @@ public class Program
 									board = $"\n\n\ud83c\udfc6 *Peringkat:* {string.Join(" · ", parts2)}\n_Ketik {config.CommandPrefix}peringkat untuk lengkap_";
 								}
 								string t = ((oppMove == null) ? $"✅ *Tepat sekali, @{senderNum}!* \ud83c\udf89 Itu jurus pamungkasnya — puzzle selesai. Keren! (+{pts} poin) ♟\ufe0f{credit}{board}" : $"✅ *Tepat sekali, @{senderNum}!* Lawan terpaksa main *{oppMove}*, dan itu menutup variannya. \ud83c\udf89 Puzzle selesai, mantap! (+{pts} poin) ♟\ufe0f{credit}{board}");
-								await lf_PostJson_0_40(http, outBase + "/send", new
+								await PostJson(http, outBase + "/send", new
 								{
-									jid = CS_cl8_278.msg.Jid,
+									jid = cl_278.msg.Jid,
 									text = t + PuzzleMove.ThemeNote(pap.Puzzle.Themes),
 									mentions = mentionList.ToArray(),
 									replyToId = inMsgId
@@ -2595,22 +2610,22 @@ public class Program
 								}
 								if (img == null)
 								{
-									await lf_PostJson_0_40(http, outBase + "/send", new
+									await PostJson(http, outBase + "/send", new
 									{
-										jid = CS_cl8_278.msg.Jid,
+										jid = cl_278.msg.Jid,
 										text = cap,
-										mentions = new string[1] { CS_cl8_278.msg.Participant },
+										mentions = new string[1] { cl_278.msg.Participant },
 										replyToId = inMsgId
 									});
 								}
 								else
 								{
-									await lf_PostJson_0_40(http, outBase + "/send-image", new
+									await PostJson(http, outBase + "/send-image", new
 									{
-										jid = CS_cl8_278.msg.Jid,
+										jid = cl_278.msg.Jid,
 										path = img,
 										caption = cap,
-										mentions = new string[1] { CS_cl8_278.msg.Participant },
+										mentions = new string[1] { cl_278.msg.Participant },
 										replyToId = inMsgId
 									});
 								}
@@ -2633,12 +2648,12 @@ public class Program
 						}
 						if (alreadyPlayed)
 						{
-							if (cmdCooldown.Allow(CS_cl8_278.msg.Jid + "|" + senderNum + "|pzplayed", 8))
+							if (cmdCooldown.Allow(cl_278.msg.Jid + "|" + senderNum + "|pzplayed", 8))
 							{
-								await lf_PostJson_0_40(http, outBase + "/react", new
+								await PostJson(http, outBase + "/react", new
 								{
-									jid = CS_cl8_278.msg.Jid,
-									key = CS_cl8_278.msg.Key,
+									jid = cl_278.msg.Jid,
+									key = cl_278.msg.Key,
 									emoji = "\ud83d\udc4d"
 								});
 							}
@@ -2648,7 +2663,7 @@ public class Program
 								action = "puzzle-already"
 							});
 						}
-						bool isReplyToPuzzle = CS_cl8_278.msg.QuotedId.Length > 0 && (CS_cl8_278.msg.QuotedId == pap.MsgId || puzzleByMsg.ContainsKey(CS_cl8_278.msg.QuotedId));
+						bool isReplyToPuzzle = cl_278.msg.QuotedId.Length > 0 && (cl_278.msg.QuotedId == pap.MsgId || puzzleByMsg.ContainsKey(cl_278.msg.QuotedId));
 						bool strongChess = Regex.IsMatch(attempt, "[KQRBNGMx=+#]") || attempt.Contains("O-O") || attempt.Contains("0-0");
 						if (!isReplyToPuzzle && !strongChess)
 						{
@@ -2659,7 +2674,7 @@ public class Program
 							});
 						}
 						pap.WrongCount++;
-						if (cmdCooldown.Allow(CS_cl8_278.msg.Jid + "|" + senderNum + "|pzwrong", (pap.WrongCount <= 3) ? 10 : 25) && cmdCooldown.Allow(CS_cl8_278.msg.Jid + "|pzwrongAny", (pap.WrongCount <= 3) ? 4 : 25))
+						if (cmdCooldown.Allow(cl_278.msg.Jid + "|" + senderNum + "|pzwrong", (pap.WrongCount <= 3) ? 10 : 25) && cmdCooldown.Allow(cl_278.msg.Jid + "|pzwrongAny", (pap.WrongCount <= 3) ? 4 : 25))
 						{
 							// nama tampil lewat mention @senderNum (di-tag agar pemain ke-notify)
 							string nextSanW = (idx < sol.Length) ? sol[idx] : "";
@@ -2668,11 +2683,11 @@ public class Program
 							{
 								text2 += "\n\nKetik " + config.CommandPrefix + (config.Puzzle?.SolveCommand ?? "solusi") + " untuk lihat jawabannya."; pap.SolveHintShown = true;
 							}
-							await lf_PostJson_0_40(http, outBase + "/send", new
+							await PostJson(http, outBase + "/send", new
 							{
-								jid = CS_cl8_278.msg.Jid,
+								jid = cl_278.msg.Jid,
 								text = text2,
-								mentions = new string[1] { CS_cl8_278.msg.Participant },
+								mentions = new string[1] { cl_278.msg.Participant },
 								replyToId = inMsgId
 							});
 						}
@@ -2695,27 +2710,27 @@ public class Program
 					}
 					if (num17 != 0)
 					{
-						string low = CS_cl8_278.msg.Text.ToLowerInvariant();
+						string low = cl_278.msg.Text.ToLowerInvariant();
 						bool otherTopic = Regex.IsMatch(low, "\\b(jadwal|turnamen|tournament|daftar|register|next|help|bantuan|standing|klasemen|pairing|hasil|result|info|kapan|dimana|di mana|harga|biaya|bayar|admin|grup|join|link)\\b");
 						bool chessCue = Regex.IsMatch(low, "(langkah|soal|solusi|jawab|posisi|skak|sekak|bidak|menteri|benteng|kuda|gajah|\\braja\\b|pion|puzzle|kenapa|knp|napa|kok|gimana|gmn|gmna|jelas|maksud|salah)");
-						bool isReplyToThis = CS_cl8_278.msg.QuotedId.Length > 0 && CS_cl8_278.msg.QuotedId == pap.MsgId;
-						bool relevant = chessCue || isReplyToThis || CS_cl8_278.msg.MentionedBot;
-						if ((low.Contains('?') || chessCue) && !otherTopic && relevant && cmdCooldown.Allow(CS_cl8_278.msg.Jid + "|" + senderNum + "|pzask", 15))
+						bool isReplyToThis = cl_278.msg.QuotedId.Length > 0 && cl_278.msg.QuotedId == pap.MsgId;
+						bool relevant = chessCue || isReplyToThis || cl_278.msg.MentionedBot;
+						if ((low.Contains('?') || chessCue) && !otherTopic && relevant && cmdCooldown.Allow(cl_278.msg.Jid + "|" + senderNum + "|pzask", 15))
 						{
 							string sideT2 = ((pap.Puzzle.Side == "w") ? "Putih" : "Hitam");
-							string solLine2 = lf_FormatPuzzleSolution_0_31(pap.Puzzle);
-							string prompt2 = $"Ini puzzle catur yang BELUM diselesaikan pemain. Posisi FEN: {pap.Puzzle.Fen}. {sideT2} yang jalan. Langkah terbaik menurut mesin (RAHASIA, untuk pemahamanmu saja): {solLine2}. Pemain bertanya/berkomentar: \"{CS_cl8_278.msg.Text.Trim()}\". " + "Jawab 1-3 kalimat pendek, ramah, Bahasa Indonesia natural. Jelaskan alasan posisi atau konsekuensi dari pertanyaan pemain. Kalau pemain menanyakan langkah yang belum pas, jawab seperti teman latihan: ringan, jelas, dan tidak menggurui. Jangan pakai istilah 'refutasi', 'konkret', 'varian', 'aku belum yakin', atau 'tidak mau asal menebak'. Kalau tidak yakin detailnya, beri arahan umum tanpa mengarang. JANGAN memberi kandidat langkah terbaik untuk pemain. JANGAN sebut atau parafrasekan langkah terbaik/solusi rahasia.";
+							string solLine2 = FormatPuzzleSolution(pap.Puzzle);
+							string prompt2 = $"Ini puzzle catur yang BELUM diselesaikan pemain. Posisi FEN: {pap.Puzzle.Fen}. {sideT2} yang jalan. Langkah terbaik menurut mesin (RAHASIA, untuk pemahamanmu saja): {solLine2}. Pemain bertanya/berkomentar: \"{cl_278.msg.Text.Trim()}\". " + "Jawab 1-3 kalimat pendek, ramah, Bahasa Indonesia natural. Jelaskan alasan posisi atau konsekuensi dari pertanyaan pemain. Kalau pemain menanyakan langkah yang belum pas, jawab seperti teman latihan: ringan, jelas, dan tidak menggurui. Jangan pakai istilah 'refutasi', 'konkret', 'varian', 'aku belum yakin', atau 'tidak mau asal menebak'. Kalau tidak yakin detailnya, beri arahan umum tanpa mengarang. JANGAN memberi kandidat langkah terbaik untuk pemain. JANGAN sebut atau parafrasekan langkah terbaik/solusi rahasia.";
 							string ans3 = await Ai.Ask(config.Ai, http, prompt2, app.Logger);
 							string reply2 = (string.IsNullOrWhiteSpace(ans3) ? "Maaf, aku belum bisa menjelaskan dengan baik sekarang. Silakan coba lagi sebentar ya." : PuzzleMove.HumanizeWrongExplanation(PuzzleMove.CleanWrongExplanation(ans3, sol)));
 							if (reply2.Length > config.Ai.MaxOutputChars)
 							{
 								reply2 = reply2.Substring(0, config.Ai.MaxOutputChars) + "…";
 							}
-							await lf_PostJson_0_40(http, outBase + "/send", new
+							await PostJson(http, outBase + "/send", new
 							{
-								jid = CS_cl8_278.msg.Jid,
+								jid = cl_278.msg.Jid,
 								text = "@" + senderNum + " " + reply2,
-								mentions = new string[1] { CS_cl8_278.msg.Participant },
+								mentions = new string[1] { cl_278.msg.Participant },
 								replyToId = inMsgId
 							});
 							return Results.Json(new
@@ -2729,8 +2744,8 @@ public class Program
 				else if (pap != null && pap.Revealed && pap.Puzzle.SolutionSan.Length != 0)
 				{
 					string attempt2 = cmdText.TrimStart('!', ' ').Trim();
-					bool recent2 = (DateTime.UtcNow - pap.SolvedAt).TotalMinutes <= 3.0 || (CS_cl8_278.msg.QuotedId.Length > 0 && CS_cl8_278.msg.QuotedId == pap.MsgId);
-					if (PuzzleMove.IsMoveLike(attempt2) && recent2 && cmdCooldown.Allow(CS_cl8_278.msg.Jid + "|" + senderNum + "|pzdone", 12))
+					bool recent2 = (DateTime.UtcNow - pap.SolvedAt).TotalMinutes <= 3.0 || (cl_278.msg.QuotedId.Length > 0 && cl_278.msg.QuotedId == pap.MsgId);
+					if (PuzzleMove.IsMoveLike(attempt2) && recent2 && cmdCooldown.Allow(cl_278.msg.Jid + "|" + senderNum + "|pzdone", 12))
 					{
 						string[] sol2 = pap.Puzzle.SolutionSan;
 						bool wasRight = false;
@@ -2743,11 +2758,11 @@ public class Program
 							}
 						}
 						string text3 = (wasRight ? ("✅ Betul juga, @" + senderNum + "! \ud83d\udc4f Tapi puzzle ini sudah keburu diselesaikan tadi. Tunggu puzzle berikutnya ya \ud83d\ude42") : ("Puzzle ini sudah selesai, @" + senderNum + ". \ud83d\ude42 Tunggu puzzle berikutnya ya!"));
-						await lf_PostJson_0_40(http, outBase + "/send", new
+						await PostJson(http, outBase + "/send", new
 						{
-							jid = CS_cl8_278.msg.Jid,
+							jid = cl_278.msg.Jid,
 							text = text3,
-							mentions = new string[1] { CS_cl8_278.msg.Participant },
+							mentions = new string[1] { cl_278.msg.Participant },
 							replyToId = inMsgId
 						});
 						return Results.Json(new
@@ -2763,12 +2778,12 @@ public class Program
 				string reply3 = await CommandHandler.Handle(cmdText, config, http, app.Logger);
 				if (reply3 != null)
 				{
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = reply3
 					});
-					TopicStore.Set(CS_cl8_278.msg.Jid, cmdName);
+					TopicStore.Set(cl_278.msg.Jid, cmdName);
 				}
 				return Results.Json(new
 				{
@@ -2793,13 +2808,13 @@ public class Program
 				FaqEntry[] entries = config.Faq.Entries;
 				foreach (FaqEntry f in entries)
 				{
-					if (string.IsNullOrEmpty(f.Pattern) || (config.Faq.RequireMention && !CS_cl8_278.msg.MentionedBot))
+					if (string.IsNullOrEmpty(f.Pattern) || (config.Faq.RequireMention && !cl_278.msg.MentionedBot))
 					{
 						continue;
 					}
 					try
 					{
-						if (Regex.IsMatch(CS_cl8_278.msg.Text, f.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+						if (Regex.IsMatch(cl_278.msg.Text, f.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
 						{
 							if (quietNow)
 							{
@@ -2810,7 +2825,7 @@ public class Program
 									id = f.Id
 								});
 							}
-							if (cooldownSec > 0 && !senderExempt && !cmdCooldown.Allow($"{CS_cl8_278.msg.Jid}|{senderNum}|faq:{f.Id}", cooldownSec))
+							if (cooldownSec > 0 && !senderExempt && !cmdCooldown.Allow($"{cl_278.msg.Jid}|{senderNum}|faq:{f.Id}", cooldownSec))
 							{
 								return Results.Json(new
 								{
@@ -2829,12 +2844,12 @@ public class Program
 							{
 								faqReply = faqReply.Replace("{rules}", config.RulesText);
 							}
-							await lf_PostJson_0_40(http, outBase + "/send", new
+							await PostJson(http, outBase + "/send", new
 							{
-								jid = CS_cl8_278.msg.Jid,
+								jid = cl_278.msg.Jid,
 								text = faqReply
 							});
-							TopicStore.Set(CS_cl8_278.msg.Jid, f.Id);
+							TopicStore.Set(cl_278.msg.Jid, f.Id);
 							return Results.Json(new
 							{
 								ok = true,
@@ -2848,7 +2863,7 @@ public class Program
 					}
 				}
 			}
-			number = NumberUtil.Normalize(CS_cl8_278.msg.Participant);
+			number = NumberUtil.Normalize(cl_278.msg.Participant);
 			if (senderExempt)
 			{
 				return Results.Json(new
@@ -2858,13 +2873,13 @@ public class Program
 				});
 			}
 			string probationKey = number;
-			bool isMedia = !string.IsNullOrEmpty(CS_cl8_278.msg.MediaType);
-			bool hasUnsafeLink = ModUtil.HasUnsafeLink(CS_cl8_278.msg.Text);
+			bool isMedia = !string.IsNullOrEmpty(cl_278.msg.MediaType);
+			bool hasUnsafeLink = ModUtil.HasUnsafeLink(cl_278.msg.Text);
 			string probeReason = null;
 			ProbationConfig pc = config.Probation;
 			if (pc != null && pc.Enabled && joins.InProbation(probationKey, pc.Minutes, DateTimeOffset.UtcNow.UtcDateTime))
 			{
-				if (pc.BlockMedia && isMedia && (!pc.BlockForwardedOnly || CS_cl8_278.msg.IsForwarded))
+				if (pc.BlockMedia && isMedia && (!pc.BlockForwardedOnly || cl_278.msg.IsForwarded))
 				{
 					probeReason = "media (anggota baru)";
 				}
@@ -2878,9 +2893,9 @@ public class Program
 			if (probeReason == null && isMedia)
 			{
 				MediaModerationConfig mm = config.MediaModeration;
-				if (mm != null && mm.BlockForwardedMedia && CS_cl8_278.msg.IsForwarded)
+				if (mm != null && mm.BlockForwardedMedia && cl_278.msg.IsForwarded)
 				{
-					num20 = ((CS_cl8_278.msg.ForwardScore >= Math.Max(1, mm.ForwardScoreThreshold)) ? 1 : 0);
+					num20 = ((cl_278.msg.ForwardScore >= Math.Max(1, mm.ForwardScoreThreshold)) ? 1 : 0);
 					goto IL_a1ed;
 				}
 			}
@@ -2895,26 +2910,26 @@ public class Program
 			{
 				if (ctx.Caps.CanDelete)
 				{
-					await lf_PostJson_0_40(http, outBase + "/delete", new
+					await PostJson(http, outBase + "/delete", new
 					{
-						jid = CS_cl8_278.msg.Jid,
-						key = CS_cl8_278.msg.Key
+						jid = cl_278.msg.Jid,
+						key = cl_278.msg.Key
 					});
 				}
-				int pcount = warnings.Increment(CS_cl8_278.msg.Jid + "|" + CS_cl8_278.msg.Participant);
+				int pcount = warnings.Increment(cl_278.msg.Jid + "|" + cl_278.msg.Participant);
 				if (!quietNow)
 				{
 					string tmpl = ((probeReason == null) ? (config.MediaModeration?.Message ?? "@user, media saya rapikan dulu untuk menjaga grup dari spam.") : (config.Probation?.Message ?? "@user, untuk anggota baru, link/media saya tahan sementara agar grup tetap aman."));
 					string warnText2 = tmpl.Replace("@user", "@" + number).Replace("{count}", pcount.ToString());
-					await lf_PostJson_0_40(http, outBase + "/send", new
+					await PostJson(http, outBase + "/send", new
 					{
-						jid = CS_cl8_278.msg.Jid,
+						jid = cl_278.msg.Jid,
 						text = warnText2,
-						mentions = new string[1] { CS_cl8_278.msg.Participant }
+						mentions = new string[1] { cl_278.msg.Participant }
 					});
 				}
 				string tag = ((probeReason != null) ? "probation" : "fwd-media");
-				audit.Write(CS_cl8_278.msg.Jid, CS_cl8_278.msg.Participant, CS_cl8_278.msg.PushName, tag, pcount, string.IsNullOrEmpty(CS_cl8_278.msg.Text) ? ("[" + CS_cl8_278.msg.MediaType + "]") : CS_cl8_278.msg.Text);
+				audit.Write(cl_278.msg.Jid, cl_278.msg.Participant, cl_278.msg.PushName, tag, pcount, string.IsNullOrEmpty(cl_278.msg.Text) ? ("[" + cl_278.msg.MediaType + "]") : cl_278.msg.Text);
 				app.Logger.LogInformation("HAPUS ({Tag}) dari {Number}, peringatan ke-{Count}", tag, number, pcount);
 				return Results.Json(new
 				{
@@ -2927,20 +2942,20 @@ public class Program
 			bool shouldWarnFlood;
 			if (eFlood)
 			{
-				(isFlood, shouldWarnFlood) = floodTracker.Check(CS_cl8_278.msg.Jid + "|" + CS_cl8_278.msg.Participant);
+				(isFlood, shouldWarnFlood) = floodTracker.Check(cl_278.msg.Jid + "|" + cl_278.msg.Participant);
 			}
 			else
 			{
 				isFlood = false;
 				shouldWarnFlood = false;
 			}
-			matched = (eModeration ? rules.FirstOrDefault((Rule rule) => lf_RuleActive_0_36(rule, CS_cl8_278.g) && !rule.Shadow && rule.Compiled.IsMatch(CS_cl8_278.msg.Text)) : null);
+			matched = (eModeration ? rules.FirstOrDefault((Rule rule) => RuleActive(rule, cl_278.g) && !rule.Shadow && rule.Compiled.IsMatch(cl_278.msg.Text)) : null);
 			if (matched == null && eModeration)
 			{
-				Rule shadow = rules.FirstOrDefault((Rule rule) => lf_RuleActive_0_36(rule, CS_cl8_278.g) && rule.Shadow && rule.Compiled.IsMatch(CS_cl8_278.msg.Text));
+				Rule shadow = rules.FirstOrDefault((Rule rule) => RuleActive(rule, cl_278.g) && rule.Shadow && rule.Compiled.IsMatch(cl_278.msg.Text));
 				if (shadow != null)
 				{
-					audit.Write(CS_cl8_278.msg.Jid, CS_cl8_278.msg.Participant, CS_cl8_278.msg.PushName, "SHADOW:" + shadow.Id, 0, CS_cl8_278.msg.Text);
+					audit.Write(cl_278.msg.Jid, cl_278.msg.Participant, cl_278.msg.PushName, "SHADOW:" + shadow.Id, 0, cl_278.msg.Text);
 					app.Logger.LogInformation("SHADOW (tidak dihapus) dari {Number} (aturan {Rule})", number, shadow.Id);
 				}
 			}
@@ -2948,13 +2963,13 @@ public class Program
 			{
 				if (ctx.Caps.CanDelete)
 				{
-					await lf_PostJson_0_40(http, outBase + "/delete", new
+					await PostJson(http, outBase + "/delete", new
 					{
-						jid = CS_cl8_278.msg.Jid,
-						key = CS_cl8_278.msg.Key
+						jid = cl_278.msg.Jid,
+						key = cl_278.msg.Key
 					});
 				}
-				count = warnings.Increment(CS_cl8_278.msg.Jid + "|" + CS_cl8_278.msg.Participant);
+				count = warnings.Increment(cl_278.msg.Jid + "|" + cl_278.msg.Participant);
 				if (!quietNow)
 				{
 					string[] wv = config.WarningMessageVariants;
@@ -2976,15 +2991,15 @@ public class Program
 			{
 				if (ctx.Caps.CanDelete)
 				{
-					await lf_PostJson_0_40(http, outBase + "/delete", new
+					await PostJson(http, outBase + "/delete", new
 					{
-						jid = CS_cl8_278.msg.Jid,
-						key = CS_cl8_278.msg.Key
+						jid = cl_278.msg.Jid,
+						key = cl_278.msg.Key
 					});
 				}
 				if (shouldWarnFlood && !quietNow)
 				{
-					fcount = warnings.Increment(CS_cl8_278.msg.Jid + "|" + CS_cl8_278.msg.Participant);
+					fcount = warnings.Increment(cl_278.msg.Jid + "|" + cl_278.msg.Participant);
 					string[] fv = config.FloodWarningMessageVariants;
 					if (fv != null)
 					{
@@ -3079,7 +3094,7 @@ public class Program
 			{
 				string number = NumberUtil.Normalize(p);
 				string text = welcomeMsg.Replace("@user", "@" + number).Replace("{group}", ev.GroupName ?? "").Replace("{rules}", rulesText);
-				await lf_PostImportant_5(ChannelRoute.BaseForJid(config, ev.Jid) + "/send", new
+				await PostImportant(ChannelRoute.BaseForJid(config, ev.Jid) + "/send", new
 				{
 					jid = ev.Jid,
 					text = text,
@@ -3153,7 +3168,7 @@ public class Program
 					error = "sertakan 'jid' grup atau 'tournamentId' yang terdaftar di tournamentGroups"
 				}, (JsonSerializerOptions?)null, (string?)null, (int?)400);
 			}
-			if (!(await lf_PostImportant_5(ChannelRoute.BaseForJid(config, jid) + "/send", new
+			if (!(await PostImportant(ChannelRoute.BaseForJid(config, jid) + "/send", new
 			{
 				jid = jid,
 				text = req.Text
@@ -3176,7 +3191,7 @@ public class Program
 			});
 		}
 
-		internal void lf_SaveActivePuzzles_30()
+		internal void SaveActivePuzzles()
 		{
 			try
 			{
@@ -3192,9 +3207,9 @@ public class Program
 			}
 		}
 
-		internal async Task lf_PostPuzzleAsync_32(string jid, bool isDaily, PuzzleItem? chosen = null, PuzzleDailySlot? slot = null)
+		internal async Task PostPuzzleAsync(string jid, bool isDaily, PuzzleItem? chosen = null, PuzzleDailySlot? slot = null)
 		{
-			DC_0_10 CS_cl8_11 = new DC_0_10
+			DC_0_10 cl_11 = new DC_0_10
 			{
 				jid = jid
 			};
@@ -3210,17 +3225,17 @@ public class Program
 			}
 			else
 			{
-				DC_0_11 CS_cl8_12 = new DC_0_11();
+				DC_0_11 cl_12 = new DC_0_11();
 				lock (puzzleLock)
 				{
-					CS_cl8_12.activeIds = (from a in activePuzzles.Values
-						where !a.Revealed && a.Jid != CS_cl8_11.jid
+					cl_12.activeIds = (from a in activePuzzles.Values
+						where !a.Revealed && a.Jid != cl_11.jid
 						select a.Puzzle.Id).ToHashSet();
 				}
 				int pzMin = slot?.MinRating ?? 0;
 				int pzMax = (slot != null && slot.MaxRating > 0) ? slot.MaxRating : 9999;
 				string pzTheme = slot?.Theme ?? "";
-				List<PuzzleItem> cand = puzzlePool.Where((PuzzleItem p) => !CS_cl8_12.activeIds.Contains(p.Id) && p.Rating >= pzMin && p.Rating <= pzMax && (pzTheme.Length == 0 || p.Themes.IndexOf(pzTheme, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
+				List<PuzzleItem> cand = puzzlePool.Where((PuzzleItem p) => !cl_12.activeIds.Contains(p.Id) && p.Rating >= pzMin && p.Rating <= pzMax && (pzTheme.Length == 0 || p.Themes.IndexOf(pzTheme, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
 				if (cand.Count == 0)
 				{
 					cand = puzzlePool.Where((PuzzleItem p) => p.Rating >= pzMin && p.Rating <= pzMax && (pzTheme.Length == 0 || p.Themes.IndexOf(pzTheme, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
@@ -3247,20 +3262,20 @@ public class Program
 			}
 			string sideText = ((puzzle.Side == "w") ? "Putih" : "Hitam");
 			string head = (isDaily ? ("\ud83e\udde9 *Puzzle " + ((!string.IsNullOrWhiteSpace(slot?.Label)) ? slot.Label : "Harian") + "*") : "\ud83e\udde9 *Puzzle*");
-			config.Groups.TryGetValue(CS_cl8_11.jid, out GroupConfig gp);
+			config.Groups.TryGetValue(cl_11.jid, out GroupConfig gp);
 			int revealMin = gp?.PuzzleRevealMinutes ?? slot?.RevealMinutes ?? pc.RevealMinutes;
 			int tierPts = PuzzleScoreStore.Tier(puzzle.Rating);
 			string tierLabel = ((tierPts >= 3) ? "sulit" : ((tierPts == 2) ? "menengah" : "mudah"));
 			string caption = $"{head} - level {puzzle.Rating} ({tierLabel}, +{tierPts} poin/langkah)\n*{sideText} jalan.* Silakan cari langkah terbaiknya.\n\n" + "Balas (reply) pesan ini dengan notasi langkahmu. Aku bantu cek, dan kalau ada lanjutan kita teruskan bareng.\n" + $"Solusi otomatis dalam {revealMin} menit. Ketik {config.CommandPrefix}peringkat untuk papan skor.";
-			string msgId = await lf_PostAndGetId_0_41(http, ChannelRoute.BaseForJid(config, CS_cl8_11.jid) + "/send-image", new
+			string msgId = await PostAndGetId(http, ChannelRoute.BaseForJid(config, cl_11.jid) + "/send-image", new
 			{
-				jid = CS_cl8_11.jid,
+				jid = cl_11.jid,
 				path = img,
 				caption = caption
 			});
 			if (msgId == null)
 			{
-				app.Logger.LogWarning("Kirim gambar puzzle GAGAL ke {Jid} - puzzle tidak diaktifkan.", CS_cl8_11.jid);
+				app.Logger.LogWarning("Kirim gambar puzzle GAGAL ke {Jid} - puzzle tidak diaktifkan.", cl_11.jid);
 				return;
 			}
 			DateTime nowUtc = DateTimeOffset.UtcNow.UtcDateTime;
@@ -3270,13 +3285,13 @@ public class Program
 				RevealAt = nowUtc.AddMinutes(revealMin),
 				Revealed = false,
 				MsgId = msgId,
-				Jid = CS_cl8_11.jid,
+				Jid = cl_11.jid,
 				PostedAt = nowUtc
 			};
 			lock (puzzleLock)
 			{
-				activePuzzles[CS_cl8_11.jid] = ap;
-				TopicStore.Set(CS_cl8_11.jid, "puzzle");
+				activePuzzles[cl_11.jid] = ap;
+				TopicStore.Set(cl_11.jid, "puzzle");
 				if (msgId.Length > 0)
 				{
 					puzzleByMsg[msgId] = ap;
@@ -3291,11 +3306,11 @@ public class Program
 					}
 				}
 			}
-			lf_SaveActivePuzzles_30();
-			app.Logger.LogInformation("Puzzle dikirim ke {Jid} (id {Id}, rating {R}, daily={D})", CS_cl8_11.jid, puzzle.Id, puzzle.Rating, isDaily);
+			SaveActivePuzzles();
+			app.Logger.LogInformation("Puzzle dikirim ke {Jid} (id {Id}, rating {R}, daily={D})", cl_11.jid, puzzle.Id, puzzle.Rating, isDaily);
 		}
 
-		internal async Task lf_RevealPuzzleAsync_33(string jid, ActivePuzzle ap, bool auto)
+		internal async Task RevealPuzzleAsync(string jid, ActivePuzzle ap, bool auto)
 		{
 			lock (puzzleLock)
 			{
@@ -3305,15 +3320,15 @@ public class Program
 				}
 				ap.Revealed = true;
 			}
-			lf_SaveActivePuzzles_30();
+			SaveActivePuzzles();
 			string sideTxt = ((ap.Puzzle.Side == "w") ? "Putih" : "Hitam");
 			string head = (auto ? "⏰ *Waktunya solusi!*" : "\ud83d\udd11 *Solusi*");
-			string caption = $"{head} (puzzle level {ap.Puzzle.Rating}, {sideTxt} jalan)\n\ud83d\udd11 {lf_FormatPuzzleSolution_0_31(ap.Puzzle)}";
+			string caption = $"{head} (puzzle level {ap.Puzzle.Rating}, {sideTxt} jalan)\n\ud83d\udd11 {FormatPuzzleSolution(ap.Puzzle)}";
 			if (config.Ai is { Enabled: true })
 			{
 				try
 				{
-					string idePrompt = "Ini puzzle catur. FEN: " + ap.Puzzle.Fen + ". Solusi lengkap: " + lf_FormatPuzzleSolution_0_31(ap.Puzzle) + ". Jelaskan IDE/taktik utama solusi ini dalam SATU kalimat pendek Bahasa Indonesia (mis. 'korban menteri untuk membuka jalur benteng lalu skakmat'). JANGAN tulis notasi langkah apa pun. Maksimal 16 kata.";
+					string idePrompt = "Ini puzzle catur. FEN: " + ap.Puzzle.Fen + ". Solusi lengkap: " + FormatPuzzleSolution(ap.Puzzle) + ". Jelaskan IDE/taktik utama solusi ini dalam SATU kalimat pendek Bahasa Indonesia (mis. 'korban menteri untuk membuka jalur benteng lalu skakmat'). JANGAN tulis notasi langkah apa pun. Maksimal 16 kata.";
 					string ide = await Ai.Ask(config.Ai, http, idePrompt, app.Logger);
 					if (!string.IsNullOrWhiteSpace(ide))
 					{
@@ -3342,7 +3357,7 @@ public class Program
 			}
 			if (img != null)
 			{
-				await lf_PostImportant_5(ChannelRoute.BaseForJid(config, jid) + "/send-image", new
+				await PostImportant(ChannelRoute.BaseForJid(config, jid) + "/send-image", new
 				{
 					jid = jid,
 					path = img,
@@ -3351,7 +3366,7 @@ public class Program
 			}
 			else
 			{
-				await lf_PostImportant_5(ChannelRoute.BaseForJid(config, jid) + "/send", new
+				await PostImportant(ChannelRoute.BaseForJid(config, jid) + "/send", new
 				{
 					jid = jid,
 					text = caption
@@ -3359,7 +3374,7 @@ public class Program
 			}
 		}
 
-		internal void lf_ReloadRuntimeConfig_34(string reason)
+		internal void ReloadRuntimeConfig(string reason)
 		{
 			lock (reloadLock)
 			{
@@ -3367,17 +3382,17 @@ public class Program
 				List<Rule> list = ConfigStore.LoadRules(configDir, app.Logger);
 				config = appConfig;
 				rules = list;
-				exempt = lf_BuildExempt_0_24(config);
+				exempt = BuildExempt(config);
 				floodTracker = new FloodTracker(config.FloodMaxMessages, config.FloodWindowSeconds, config.FloodWarnCooldownSeconds);
 				app.Logger.LogInformation("Reload otomatis ({Reason}): {Rules} aturan, {Exempt} exempt", reason, rules.Count, exempt.Count);
 			}
 		}
 
-		internal FileSystemWatcher lf_StartConfigWatcher_35()
+		internal FileSystemWatcher StartConfigWatcher()
 		{
-			DC_0_12 CS_cl8_4 = new DC_0_12
+			DC_0_12 cl_4 = new DC_0_12
 			{
-				CS_cl8_6 = this
+				cl_6 = this
 			};
 			FileSystemWatcher fileSystemWatcher = new FileSystemWatcher(configDir, "*.json")
 			{
@@ -3385,18 +3400,18 @@ public class Program
 				NotifyFilter = (NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.LastWrite),
 				EnableRaisingEvents = true
 			};
-			CS_cl8_4.debounceTimer = null;
+			cl_4.debounceTimer = null;
 			fileSystemWatcher.Changed += delegate(object _, FileSystemEventArgs e)
 			{
-				CS_cl8_4.lf_QueueReload_79(e.FullPath);
+				cl_4.QueueReload(e.FullPath);
 			};
 			fileSystemWatcher.Created += delegate(object _, FileSystemEventArgs e)
 			{
-				CS_cl8_4.lf_QueueReload_79(e.FullPath);
+				cl_4.QueueReload(e.FullPath);
 			};
 			fileSystemWatcher.Renamed += delegate(object _, RenamedEventArgs e)
 			{
-				CS_cl8_4.lf_QueueReload_79(e.FullPath);
+				cl_4.QueueReload(e.FullPath);
 			};
 			return fileSystemWatcher;
 		}
@@ -3442,16 +3457,16 @@ public class Program
 	{
 		public Timer debounceTimer;
 
-		public DC_0_0 CS_cl8_6;
+		public DC_0_0 cl_6;
 
-		internal void lf_QueueReload_79(string path)
+		internal void QueueReload(string path)
 		{
-			DC_0_13 CS_cl8_6 = new DC_0_13
+			DC_0_13 cl_6 = new DC_0_13
 			{
-				CS_cl8_7 = this,
+				cl_7 = this,
 				fileName = Path.GetFileName(path)
 			};
-			if (!CS_cl8_6.fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase) && !CS_cl8_6.fileName.Equals("rules.json", StringComparison.OrdinalIgnoreCase))
+			if (!cl_6.fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase) && !cl_6.fileName.Equals("rules.json", StringComparison.OrdinalIgnoreCase))
 			{
 				return;
 			}
@@ -3460,28 +3475,28 @@ public class Program
 			{
 				try
 				{
-					CS_cl8_6.CS_cl8_7.CS_cl8_6.lf_ReloadRuntimeConfig_34("file changed: " + CS_cl8_6.fileName);
+					cl_6.cl_7.cl_6.ReloadRuntimeConfig("file changed: " + cl_6.fileName);
 				}
 				catch (Exception exception)
 				{
-					CS_cl8_6.CS_cl8_7.CS_cl8_6.app.Logger.LogError(exception, "Gagal reload otomatis dari {File}", CS_cl8_6.fileName);
+					cl_6.cl_7.cl_6.app.Logger.LogError(exception, "Gagal reload otomatis dari {File}", cl_6.fileName);
 				}
 			}, null, TimeSpan.FromMilliseconds(700L), Timeout.InfiniteTimeSpan);
 		}
 
 		internal void lam_80(object _, FileSystemEventArgs e)
 		{
-			lf_QueueReload_79(e.FullPath);
+			QueueReload(e.FullPath);
 		}
 
 		internal void lam_81(object _, FileSystemEventArgs e)
 		{
-			lf_QueueReload_79(e.FullPath);
+			QueueReload(e.FullPath);
 		}
 
 		internal void lam_82(object _, RenamedEventArgs e)
 		{
-			lf_QueueReload_79(e.FullPath);
+			QueueReload(e.FullPath);
 		}
 	}
 
@@ -3490,17 +3505,17 @@ public class Program
 	{
 		public string fileName;
 
-		public DC_0_12 CS_cl8_7;
+		public DC_0_12 cl_7;
 
 		internal void lam_83(object? _)
 		{
 			try
 			{
-				CS_cl8_7.CS_cl8_6.lf_ReloadRuntimeConfig_34("file changed: " + fileName);
+				cl_7.cl_6.ReloadRuntimeConfig("file changed: " + fileName);
 			}
 			catch (Exception exception)
 			{
-				CS_cl8_7.CS_cl8_6.app.Logger.LogError(exception, "Gagal reload otomatis dari {File}", fileName);
+				cl_7.cl_6.app.Logger.LogError(exception, "Gagal reload otomatis dari {File}", fileName);
 			}
 		}
 	}
@@ -3523,26 +3538,26 @@ public class Program
 
 		public int[] reminders;
 
-		public DC_0_0 CS_cl8_1;
+		public DC_0_0 cl_1;
 
 		internal object lam_50(SwissItem t)
 		{
-			DC_0_4 CS_cl8_6 = new DC_0_4
+			DC_0_4 cl_6 = new DC_0_4
 			{
-				CS_cl8_2 = this,
+				cl_2 = this,
 				t = t
 			};
 			return new
 			{
-				Name = CS_cl8_6.t.Name,
-				Id = CS_cl8_6.t.Id,
-				minutesUntilStart = (int)(CS_cl8_6.t.StartsAt - now).TotalMinutes,
+				Name = cl_6.t.Name,
+				Id = cl_6.t.Id,
+				minutesUntilStart = (int)(cl_6.t.StartsAt - now).TotalMinutes,
 				dueNow = reminders.Where(delegate(int T)
 				{
-					double totalMinutes = (CS_cl8_6.t.StartsAt - CS_cl8_6.CS_cl8_2.now).TotalMinutes;
+					double totalMinutes = (cl_6.t.StartsAt - cl_6.cl_2.now).TotalMinutes;
 					return totalMinutes > 0.0 && totalMinutes <= (double)T && totalMinutes >= (double)(T - 60);
 				}).ToArray(),
-				sample = Announcer.BuildText(CS_cl8_1.config, CS_cl8_6.t, (reminders.Length != 0) ? reminders[0] : 300)
+				sample = Announcer.BuildText(cl_1.config, cl_6.t, (reminders.Length != 0) ? reminders[0] : 300)
 			};
 		}
 	}
@@ -3552,11 +3567,11 @@ public class Program
 	{
 		public SwissItem t;
 
-		public DC_0_3 CS_cl8_2;
+		public DC_0_3 cl_2;
 
 		internal bool lam_51(int T)
 		{
-			double totalMinutes = (t.StartsAt - CS_cl8_2.now).TotalMinutes;
+			double totalMinutes = (t.StartsAt - cl_2.now).TotalMinutes;
 			return totalMinutes > 0.0 && totalMinutes <= (double)T && totalMinutes >= (double)(T - 60);
 		}
 	}
@@ -3568,16 +3583,16 @@ public class Program
 
 		public IncomingMessage msg;
 
-		public DC_0_0 CS_cl8_3;
+		public DC_0_0 cl_3;
 
 		internal bool lam_53(Rule r)
 		{
-			return lf_RuleActive_0_36(r, g) && !r.Shadow && r.Compiled.IsMatch(msg.Text);
+			return RuleActive(r, g) && !r.Shadow && r.Compiled.IsMatch(msg.Text);
 		}
 
 		internal bool lam_62(Rule r)
 		{
-			return lf_RuleActive_0_36(r, g) && r.Shadow && r.Compiled.IsMatch(msg.Text);
+			return RuleActive(r, g) && r.Shadow && r.Compiled.IsMatch(msg.Text);
 		}
 	}
 
@@ -3592,7 +3607,7 @@ public class Program
 
 		public string hubJid;
 
-		public DC_0_5 CS_cl8_4;
+		public DC_0_5 cl_4;
 
 		internal async Task? lam_55()
 		{
@@ -3601,7 +3616,7 @@ public class Program
 			{
 				try
 				{
-					if (await lf_PostJson_0_40(CS_cl8_4.CS_cl8_3.http, ChannelRoute.BaseForJid(CS_cl8_4.CS_cl8_3.config, tj) + "/send", new
+					if (await PostJson(cl_4.cl_3.http, ChannelRoute.BaseForJid(cl_4.cl_3.config, tj) + "/send", new
 					{
 						jid = tj,
 						text = outText
@@ -3612,14 +3627,14 @@ public class Program
 				}
 				catch (Exception ex)
 				{
-					CS_cl8_4.CS_cl8_3.app.Logger.LogError("Announcement gagal ke {Jid}: {Msg}", tj, ex.Message);
+					cl_4.cl_3.app.Logger.LogError("Announcement gagal ke {Jid}: {Msg}", tj, ex.Message);
 				}
 				if (throttleMs > 0)
 				{
 					await Task.Delay(throttleMs);
 				}
 			}
-			await lf_PostJson_0_40(CS_cl8_4.CS_cl8_3.http, ChannelRoute.BaseForJid(CS_cl8_4.CS_cl8_3.config, hubJid) + "/send", new
+			await PostJson(cl_4.cl_3.http, ChannelRoute.BaseForJid(cl_4.cl_3.config, hubJid) + "/send", new
 			{
 				jid = hubJid,
 				text = $"Announcement terkirim ke {okCount}/{targets.Count} grup."
@@ -3638,7 +3653,7 @@ public class Program
 
 		public string hubJid;
 
-		public DC_0_5 CS_cl8_5;
+		public DC_0_5 cl_5;
 
 		internal async Task? lam_58()
 		{
@@ -3647,7 +3662,7 @@ public class Program
 			{
 				try
 				{
-					if (await lf_PostJson_0_40(CS_cl8_5.CS_cl8_3.http, ChannelRoute.BaseForJid(CS_cl8_5.CS_cl8_3.config, tj) + "/send", new
+					if (await PostJson(cl_5.cl_3.http, ChannelRoute.BaseForJid(cl_5.cl_3.config, tj) + "/send", new
 					{
 						jid = tj,
 						text = outText
@@ -3657,19 +3672,19 @@ public class Program
 					}
 					else
 					{
-						CS_cl8_5.CS_cl8_3.app.Logger.LogWarning("Relay gagal (gateway tolak) ke {Jid}", tj);
+						cl_5.cl_3.app.Logger.LogWarning("Relay gagal (gateway tolak) ke {Jid}", tj);
 					}
 				}
 				catch (Exception ex)
 				{
-					CS_cl8_5.CS_cl8_3.app.Logger.LogError("Relay gagal ke {Jid}: {Msg}", tj, ex.Message);
+					cl_5.cl_3.app.Logger.LogError("Relay gagal ke {Jid}: {Msg}", tj, ex.Message);
 				}
 				if (throttleMs > 0)
 				{
 					await Task.Delay(throttleMs);
 				}
 			}
-			await lf_PostJson_0_40(CS_cl8_5.CS_cl8_3.http, ChannelRoute.BaseForJid(CS_cl8_5.CS_cl8_3.config, hubJid) + "/send", new
+			await PostJson(cl_5.cl_3.http, ChannelRoute.BaseForJid(cl_5.cl_3.config, hubJid) + "/send", new
 			{
 				jid = hubJid,
 				text = $"Selesai menyebar ke {okCount}/{targetJids.Count} grup."
@@ -3688,19 +3703,19 @@ public class Program
 
 		public int max;
 
-		internal bool lf_NotActive_66((PuzzleItem p, int i) x)
+		internal bool NotActive((PuzzleItem p, int i) x)
 		{
 			return excludeIds == null || !excludeIds.Contains(x.p.Id);
 		}
 
 		internal bool lam_68((PuzzleItem p, int i) x)
 		{
-			return !usedIdx.Contains(x.i) && lf_NotActive_66(x) && x.p.Rating >= min && x.p.Rating <= max;
+			return !usedIdx.Contains(x.i) && NotActive(x) && x.p.Rating >= min && x.p.Rating <= max;
 		}
 
 		internal bool lam_70((PuzzleItem p, int i) x)
 		{
-			return !usedIdx.Contains(x.i) && lf_NotActive_66(x);
+			return !usedIdx.Contains(x.i) && NotActive(x);
 		}
 
 		internal bool lam_72((PuzzleItem p, int i) x)
@@ -3711,74 +3726,74 @@ public class Program
 
 	private static void Main(string[] args)
 	{
-		DC_0_0 CS_cl8_472 = new DC_0_0();
+		DC_0_0 cl_472 = new DC_0_0();
 		WebApplicationBuilder webApplicationBuilder = WebApplication.CreateBuilder(args);
-		CS_cl8_472.app = webApplicationBuilder.Build();
-		SendLog.Logger = CS_cl8_472.app.Logger;
+		cl_472.app = webApplicationBuilder.Build();
+		SendLog.Logger = cl_472.app.Logger;
 		string contentRootPath = webApplicationBuilder.Environment.ContentRootPath;
-		CS_cl8_472.configDir = Path.Combine(contentRootPath, "config");
+		cl_472.configDir = Path.Combine(contentRootPath, "config");
 		string text = Path.Combine(contentRootPath, "logs");
 		string text2 = Path.Combine(contentRootPath, "data");
 		Directory.CreateDirectory(text);
 		Directory.CreateDirectory(text2);
-		CS_cl8_472.config = ConfigStore.LoadConfig(CS_cl8_472.configDir);
-		CS_cl8_472.rules = ConfigStore.LoadRules(CS_cl8_472.configDir, CS_cl8_472.app.Logger);
-		CS_cl8_472.exempt = lf_BuildExempt_0_24(CS_cl8_472.config);
-		CS_cl8_472.audit = new AuditLog(Path.Combine(text, "audit.log"));
+		cl_472.config = ConfigStore.LoadConfig(cl_472.configDir);
+		cl_472.rules = ConfigStore.LoadRules(cl_472.configDir, cl_472.app.Logger);
+		cl_472.exempt = BuildExempt(cl_472.config);
+		cl_472.audit = new AuditLog(Path.Combine(text, "audit.log"));
 		ConvMemory.Init(Path.Combine(text2, "conv-memory.json"));
 		RetryQueue.Init(Path.Combine(text2, "retry-queue.json"));
 		Sleeper.Init(Path.Combine(text2, "asleep.flag"));
-		CS_cl8_472.warnings = new WarningStore(Path.Combine(text2, "warnings.json"));
-		CS_cl8_472.joins = new JoinStore(Path.Combine(text2, "joins.json"));
-		CS_cl8_472.floodTracker = new FloodTracker(CS_cl8_472.config.FloodMaxMessages, CS_cl8_472.config.FloodWindowSeconds, CS_cl8_472.config.FloodWarnCooldownSeconds);
-		CS_cl8_472.cmdCooldown = new CooldownTracker();
-		CS_cl8_472.reloadLock = new object();
-		CS_cl8_472.app.Logger.LogInformation("Brain siap. {Rules} aturan, {Exempt} nomor dikecualikan, {Warned} riwayat peringatan dimuat.", CS_cl8_472.rules.Count, CS_cl8_472.exempt.Count, CS_cl8_472.warnings.Count);
-		CS_cl8_472.http = new HttpClient();
-		CS_cl8_472.startedAt = DateTime.UtcNow;
-		CS_cl8_472.configWatcher = CS_cl8_472.lf_StartConfigWatcher_35();
-		CS_cl8_472.app.Lifetime.ApplicationStopping.Register(delegate
+		cl_472.warnings = new WarningStore(Path.Combine(text2, "warnings.json"));
+		cl_472.joins = new JoinStore(Path.Combine(text2, "joins.json"));
+		cl_472.floodTracker = new FloodTracker(cl_472.config.FloodMaxMessages, cl_472.config.FloodWindowSeconds, cl_472.config.FloodWarnCooldownSeconds);
+		cl_472.cmdCooldown = new CooldownTracker();
+		cl_472.reloadLock = new object();
+		cl_472.app.Logger.LogInformation("Brain siap. {Rules} aturan, {Exempt} nomor dikecualikan, {Warned} riwayat peringatan dimuat.", cl_472.rules.Count, cl_472.exempt.Count, cl_472.warnings.Count);
+		cl_472.http = new HttpClient();
+		cl_472.startedAt = DateTime.UtcNow;
+		cl_472.configWatcher = cl_472.StartConfigWatcher();
+		cl_472.app.Lifetime.ApplicationStopping.Register(delegate
 		{
-			CS_cl8_472.configWatcher.Dispose();
+			cl_472.configWatcher.Dispose();
 		});
 		string sentPath = Path.Combine(text2, "announcer-sent.json");
 		string resultsPath = Path.Combine(text2, "results-sent.json");
-		Announcer.RunLoop(() => CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger, sentPath, resultsPath);
+		Announcer.RunLoop(() => cl_472.config, cl_472.http, cl_472.app.Logger, sentPath, resultsPath);
 		string sentPath2 = Path.Combine(text2, "ccl-sent.json");
-		Ccl.RunLoop(() => CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger, sentPath2);
-		AdminSync.RunLoop(() => CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger);
+		Ccl.RunLoop(() => cl_472.config, cl_472.http, cl_472.app.Logger, sentPath2);
+		AdminSync.RunLoop(() => cl_472.config, cl_472.http, cl_472.app.Logger);
 		string statePath = Path.Combine(text2, "modreport-last.txt");
-		ModerationReport.RunLoop(() => CS_cl8_472.config, CS_cl8_472.audit, CS_cl8_472.http, CS_cl8_472.app.Logger, statePath);
-		RetryQueue.RunLoop(CS_cl8_472.http, CS_cl8_472.app.Logger);
-		CS_cl8_472.sessions = new SessionStore();
-		CS_cl8_472.puzzleCacheDir = Path.Combine(text2, "puzzle-cache");
-		CS_cl8_472.pieceAssetsDir = Path.Combine(contentRootPath, "assets", "pieces");
-		CS_cl8_472.activePuzzlePath = Path.Combine(text2, "active-puzzles.json");
-		CS_cl8_472.puzzlePool = lf_LoadPuzzlePool_0_25(Path.Combine(text2, "puzzles.json"), CS_cl8_472.app.Logger);
-		CS_cl8_472.activePuzzles = lf_LoadActivePuzzles_0_26(CS_cl8_472.activePuzzlePath);
-		CS_cl8_472.puzzleByMsg = new Dictionary<string, ActivePuzzle>();
-		foreach (ActivePuzzle value in CS_cl8_472.activePuzzles.Values)
+		ModerationReport.RunLoop(() => cl_472.config, cl_472.audit, cl_472.http, cl_472.app.Logger, statePath);
+		RetryQueue.RunLoop(cl_472.http, cl_472.app.Logger);
+		cl_472.sessions = new SessionStore();
+		cl_472.puzzleCacheDir = Path.Combine(text2, "puzzle-cache");
+		cl_472.pieceAssetsDir = Path.Combine(contentRootPath, "assets", "pieces");
+		cl_472.activePuzzlePath = Path.Combine(text2, "active-puzzles.json");
+		cl_472.puzzlePool = LoadPuzzlePool(Path.Combine(text2, "puzzles.json"), cl_472.app.Logger);
+		cl_472.activePuzzles = LoadActivePuzzles(cl_472.activePuzzlePath);
+		cl_472.puzzleByMsg = new Dictionary<string, ActivePuzzle>();
+		foreach (ActivePuzzle value in cl_472.activePuzzles.Values)
 		{
 			if (value.MsgId.Length > 0)
 			{
-				CS_cl8_472.puzzleByMsg[value.MsgId] = value;
+				cl_472.puzzleByMsg[value.MsgId] = value;
 			}
 		}
-		CS_cl8_472.puzzleLock = new object();
-		CS_cl8_472.puzzleDailyStatePath = Path.Combine(text2, "puzzle-daily.json");
+		cl_472.puzzleLock = new object();
+		cl_472.puzzleDailyStatePath = Path.Combine(text2, "puzzle-daily.json");
 		PuzzleScoreStore.Init(Path.Combine(text2, "puzzle-scores.json"));
 		StockfishEngine.Init(Path.Combine(contentRootPath, "engine", "stockfish.exe"), 1500);
-		CS_cl8_472.app.Logger.LogInformation("Stockfish engine: {S}", StockfishEngine.Available ? "siap" : "TAK ADA (engine/stockfish.exe)");
-		CS_cl8_472.app.Logger.LogInformation("Pool puzzle: {N} dimuat.", CS_cl8_472.puzzlePool.Count);
+		cl_472.app.Logger.LogInformation("Stockfish engine: {S}", StockfishEngine.Available ? "siap" : "TAK ADA (engine/stockfish.exe)");
+		cl_472.app.Logger.LogInformation("Pool puzzle: {N} dimuat.", cl_472.puzzlePool.Count);
 		Task.Run(async delegate
 		{
-			HashSet<string> sentSlots = lf_LoadPuzzleDailyState_0_27(CS_cl8_472.puzzleDailyStatePath);
+			HashSet<string> sentSlots = LoadPuzzleDailyState(cl_472.puzzleDailyStatePath);
 			while (true)
 			{
 				try
 				{
-					PuzzleConfig pc = CS_cl8_472.config.Puzzle;
-					if (pc != null && pc.Enabled && CS_cl8_472.puzzlePool.Count > 0)
+					PuzzleConfig pc = cl_472.config.Puzzle;
+					if (pc != null && pc.Enabled && cl_472.puzzlePool.Count > 0)
 					{
 						DateTime nowLocal = DateTime.UtcNow.AddHours(pc.TimezoneOffsetHours);
 						string today = nowLocal.ToString("yyyy-MM-dd");
@@ -3804,9 +3819,9 @@ public class Program
 								foreach (string gj in dailyTargets)
 								{
 									HashSet<string> activeIds;
-									lock (CS_cl8_472.puzzleLock)
+									lock (cl_472.puzzleLock)
 									{
-										activeIds = (from a in CS_cl8_472.activePuzzles.Values
+										activeIds = (from a in cl_472.activePuzzles.Values
 											where !a.Revealed && a.Jid != gj
 											select a.Puzzle.Id).ToHashSet();
 									}
@@ -3814,18 +3829,18 @@ public class Program
 									if (!sentSlots.Contains(slotKey))
 									{
 										ActivePuzzle curp;
-										lock (CS_cl8_472.puzzleLock)
+										lock (cl_472.puzzleLock)
 										{
-											CS_cl8_472.activePuzzles.TryGetValue(gj, out curp);
+											cl_472.activePuzzles.TryGetValue(gj, out curp);
 										}
 										if (curp != null && !curp.Revealed)
 										{
-											await CS_cl8_472.lf_RevealPuzzleAsync_33(gj, curp, true);
+											await cl_472.RevealPuzzleAsync(gj, curp, true);
 										}
-										PuzzleItem puzzle = lf_PickPuzzleForSlot_0_29(CS_cl8_472.puzzlePool, slot, usedIdx, activeIds);
-										await CS_cl8_472.lf_PostPuzzleAsync_32(gj, true, puzzle, slot);
+										PuzzleItem puzzle = PickPuzzleForSlot(cl_472.puzzlePool, slot, usedIdx, activeIds);
+										await cl_472.PostPuzzleAsync(gj, true, puzzle, slot);
 										sentSlots.Add(slotKey);
-										lf_SavePuzzleDailyState_0_28(CS_cl8_472.puzzleDailyStatePath, sentSlots, today);
+										SavePuzzleDailyState(cl_472.puzzleDailyStatePath, sentSlots, today);
 										activeIds = null;
 										curp = null;
 									}
@@ -3833,9 +3848,9 @@ public class Program
 							}
 						}
 						List<(string jid, ActivePuzzle ap)> due = new List<(string, ActivePuzzle)>();
-						lock (CS_cl8_472.puzzleLock)
+						lock (cl_472.puzzleLock)
 						{
-							foreach (KeyValuePair<string, ActivePuzzle> kv in CS_cl8_472.activePuzzles)
+							foreach (KeyValuePair<string, ActivePuzzle> kv in cl_472.activePuzzles)
 							{
 								if (!kv.Value.Revealed && DateTimeOffset.UtcNow.UtcDateTime >= kv.Value.RevealAt)
 								{
@@ -3845,28 +3860,28 @@ public class Program
 						}
 						foreach (var (jid, ap) in due)
 						{
-							await CS_cl8_472.lf_RevealPuzzleAsync_33(jid, ap, true);
+							await cl_472.RevealPuzzleAsync(jid, ap, true);
 						}
 					}
 				}
 				catch (Exception ex)
 				{
 					Exception ex2 = ex;
-					CS_cl8_472.app.Logger.LogError("Puzzle loop error: {Msg}", ex2.Message);
+					cl_472.app.Logger.LogError("Puzzle loop error: {Msg}", ex2.Message);
 				}
 				await Task.Delay(TimeSpan.FromSeconds(30L));
 			}
 		});
-		CS_cl8_472.app.MapGet("/health", (Func<IResult>)(() => Results.Json(new
+		cl_472.app.MapGet("/health", (Func<IResult>)(() => Results.Json(new
 		{
 			ok = true,
-			rules = CS_cl8_472.rules.Count,
-			exempt = CS_cl8_472.exempt.Count,
-			warned = CS_cl8_472.warnings.Count
+			rules = cl_472.rules.Count,
+			exempt = cl_472.exempt.Count,
+			warned = cl_472.warnings.Count
 		})));
-		CS_cl8_472.app.MapGet("/analyze", (Func<string, Task<IResult>>)async delegate(string? q)
+		cl_472.app.MapGet("/analyze", (Func<string, Task<IResult>>)async delegate(string? q)
 		{
-			ChessAnalysis.Output o = await ChessAnalysis.Run(q ?? "", CS_cl8_472.config.Ai, CS_cl8_472.http, CS_cl8_472.app.Logger);
+			ChessAnalysis.Output o = await ChessAnalysis.Run(q ?? "", cl_472.config.Ai, cl_472.http, cl_472.app.Logger);
 			return Results.Json(new
 			{
 				ok = true,
@@ -3875,11 +3890,11 @@ public class Program
 				fen = o?.Fen
 			});
 		});
-		CS_cl8_472.app.MapGet("/recognize", (Func<string, int?, Task<IResult>>)async delegate(string url, int? flip)
+		cl_472.app.MapGet("/recognize", (Func<string, int?, Task<IResult>>)async delegate(string url, int? flip)
 		{
 			try
 			{
-				string fen = BoardVision.RecognizeFen(await CS_cl8_472.http.GetByteArrayAsync(url), CS_cl8_472.pieceAssetsDir, flip == 1);
+				string fen = BoardVision.RecognizeFen(await cl_472.http.GetByteArrayAsync(url), cl_472.pieceAssetsDir, flip == 1);
 				return Results.Json(new
 				{
 					ok = true,
@@ -3896,53 +3911,53 @@ public class Program
 				});
 			}
 		});
-		CS_cl8_472.app.MapGet("/stats", (Func<Task<IResult>>)async delegate
+		cl_472.app.MapGet("/stats", (Func<Task<IResult>>)async delegate
 		{
 			bool gw = false;
 			try
 			{
-				gw = (await CS_cl8_472.http.GetStringAsync(CS_cl8_472.config.GatewayUrl + "/health")).Contains("\"connected\":true");
+				gw = (await cl_472.http.GetStringAsync(cl_472.config.GatewayUrl + "/health")).Contains("\"connected\":true");
 			}
 			catch
 			{
 			}
-			int modToday = CS_cl8_472.audit.LinesSince(DateTime.Now.Date).Count((string l) => l.Contains("| HAPUS |") && !l.Contains("aturan=SHADOW:"));
+			int modToday = cl_472.audit.LinesSince(DateTime.Now.Date).Count((string l) => l.Contains("| HAPUS |") && !l.Contains("aturan=SHADOW:"));
 			return Results.Json(new
 			{
 				ok = true,
-				uptimeMinutes = (int)(DateTime.UtcNow - CS_cl8_472.startedAt).TotalMinutes,
+				uptimeMinutes = (int)(DateTime.UtcNow - cl_472.startedAt).TotalMinutes,
 				gatewayConnected = gw,
 				asleep = Sleeper.Asleep,
 				sent = SendLog.Sent,
 				failed = SendLog.Failed,
 				retryQueue = RetryQueue.Count,
-				activePuzzles = CS_cl8_472.activePuzzles.Count,
-				warningsTracked = CS_cl8_472.warnings.Count,
+				activePuzzles = cl_472.activePuzzles.Count,
+				warningsTracked = cl_472.warnings.Count,
 				moderatedToday = modToday,
-				rules = CS_cl8_472.rules.Count,
-				managedGroups = (CS_cl8_472.config.ManageAllGroups ? (-1) : CS_cl8_472.config.Groups.Count)
+				rules = cl_472.rules.Count,
+				managedGroups = (cl_472.config.ManageAllGroups ? (-1) : cl_472.config.Groups.Count)
 			});
 		});
-		CS_cl8_472.app.MapGet("/admin/groups", (Func<HttpContext, IResult>)((HttpContext c) => CS_cl8_472.lf_PanelAuthOk_12(c) ? Results.Json(new
+		cl_472.app.MapGet("/admin/groups", (Func<HttpContext, IResult>)((HttpContext c) => cl_472.PanelAuthOk(c) ? Results.Json(new
 		{
 			ok = true,
-			manageAll = CS_cl8_472.config.ManageAllGroups,
-			groups = Enumerable.Select(CS_cl8_472.config.Groups, (KeyValuePair<string, GroupConfig> kv) => new
+			manageAll = cl_472.config.ManageAllGroups,
+			groups = Enumerable.Select(cl_472.config.Groups, (KeyValuePair<string, GroupConfig> kv) => new
 			{
 				jid = kv.Key,
 				label = kv.Value.Label
 			}).ToList()
-		}) : lf_PanelDeny_0_13(c)));
-		CS_cl8_472.app.MapGet("/admin/audit", (Func<HttpContext, int?, IResult>)delegate(HttpContext c, int? n)
+		}) : PanelDeny(c)));
+		cl_472.app.MapGet("/admin/audit", (Func<HttpContext, int?, IResult>)delegate(HttpContext c, int? n)
 		{
 			IResult result;
-			if (!CS_cl8_472.lf_PanelAuthOk_12(c))
+			if (!cl_472.PanelAuthOk(c))
 			{
-				result = lf_PanelDeny_0_13(c);
+				result = PanelDeny(c);
 			}
 			else
 			{
-				AuditLog auditLog = CS_cl8_472.audit;
+				AuditLog auditLog = cl_472.audit;
 				int n2;
 				switch (n)
 				{
@@ -4060,20 +4075,20 @@ public class Program
 			}
 			return result;
 		});
-		CS_cl8_472.app.MapGet("/admin", (Func<HttpContext, IResult>)((HttpContext c) => CS_cl8_472.lf_PanelAuthOk_12(c) ? Results.Content("<!doctype html><html lang=id><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">\r\n<title>WA Bot \\u2014 Admin</title><style>\r\nbody{font-family:system-ui,sans-serif;margin:0;background:#0f1216;color:#e6e6e6}\r\nheader{background:#16a34a;color:#fff;padding:12px 16px;font-weight:700}\r\n.wrap{padding:16px;max-width:900px;margin:auto}\r\n.card{background:#1a1f26;border:1px solid #2a2f37;border-radius:10px;padding:14px;margin:12px 0}\r\n.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}\r\n.metric{background:#11151a;border-radius:8px;padding:10px;text-align:center}\r\n.metric b{display:block;font-size:1.4rem;color:#16a34a}.metric span{font-size:.78rem;color:#9aa4af}\r\nbutton{background:#16a34a;color:#fff;border:0;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600;margin:2px}\r\nbutton.warn{background:#b45309}button.alt{background:#374151}\r\ninput,textarea{width:100%;box-sizing:border-box;background:#11151a;border:1px solid #2a2f37;color:#e6e6e6;border-radius:8px;padding:8px;margin:4px 0}\r\ntable{width:100%;border-collapse:collapse;font-size:.82rem}td,th{border-bottom:1px solid #2a2f37;padding:6px;text-align:left}\r\n.ok{color:#16a34a}.bad{color:#ef4444}pre{white-space:pre-wrap;font-size:.78rem;color:#9aa4af;max-height:240px;overflow:auto}\r\nh3{margin:.2rem 0 .6rem}</style></head><body>\r\n<header>\\U0001F916 WA Bot \\u2014 Panel Admin (lokal)</header><div class=wrap>\r\n<div class=card><h3>Status</h3><div class=grid id=metrics>memuat\\u2026</div></div>\r\n<div class=card><h3>Aksi cepat</h3>\r\n<input id=token placeholder=\"Token admin (untuk restart/broadcast)\">\r\n<div><button onclick=reload()>Reload config</button>\r\n<button class=alt onclick=\"restart('brain')\">Restart brain</button>\r\n<button class=alt onclick=\"restart('gateway')\">Restart gateway</button>\r\n<button class=warn onclick=\"restart('both')\">Restart both</button></div>\r\n<div id=msg></div></div>\r\n<div class=card><h3>Broadcast</h3>\r\n<input id=bjid placeholder=\"JID grup tujuan (mis. 1203...@g.us)\">\r\n<textarea id=btext placeholder=\"Isi pesan\"></textarea>\r\n<button onclick=broadcast()>Kirim broadcast</button></div>\r\n<div class=card><h3>Grup dikelola</h3><div id=groups>memuat\\u2026</div></div>\r\n<div class=card><h3>Audit moderasi terbaru</h3><pre id=audit>memuat\\u2026</pre></div></div>\r\n<script>\r\nconst $=s=>document.querySelector(s);\r\n$('#token').value=localStorage.getItem('wabotToken')||'';\r\n$('#token').oninput=e=>localStorage.setItem('wabotToken',e.target.value);\r\nasync function j(u,o){const r=await fetch(u,o);try{return await r.json()}catch{return{status:r.status}}}\r\nasync function refresh(){\r\n const s=await j('/stats');if(s.ok){$('#metrics').innerHTML=[\r\n  ['Gateway',s.gatewayConnected?'<span class=ok>OK</span>':'<span class=bad>OFF</span>'],\r\n  ['Terkirim',s.sent],['Gagal',s.failed],['Antre ulang',s.retryQueue],\r\n  ['Puzzle aktif',s.activePuzzles],['Moderasi/hari',s.moderatedToday],\r\n  ['Peringatan',s.warningsTracked],['Grup',s.managedGroups],['Aturan',s.rules],\r\n  ['Uptime(m)',s.uptimeMinutes],['Tidur',s.asleep?'ya':'tidak']\r\n ].map(m=>`<div class=metric><b>${m[1]}</b><span>${m[0]}</span></div>`).join('')}\r\n const g=await j('/admin/groups');$('#groups').innerHTML='<table><tr><th>Label</th><th>JID</th></tr>'+(g.groups||[]).map(x=>`<tr><td>${x.label||''}</td><td>${x.jid}</td></tr>`).join('')+'</table>';\r\n const a=await j('/admin/audit?n=15');$('#audit').textContent=(a.lines||[]).join('\\n')||'(belum ada)';}\r\nfunction note(t,ok){$('#msg').innerHTML=`<p class=\"${ok?'ok':'bad'}\">${t}</p>`}\r\nasync function reload(){const r=await j('/reload',{method:'POST'});note('Reload: '+(r.ok?'OK':'gagal'),r.ok);refresh()}\r\nasync function restart(t){const k=$('#token').value;if(!k)return note('Isi token dulu',false);note('Mengirim restart '+t+'\\u2026',true);await fetch(`/admin/restart?token=${encodeURIComponent(k)}&target=${t}`,{method:'POST'});setTimeout(()=>{note('Perintah restart '+t+' terkirim.',true);refresh()},1800)}\r\nasync function broadcast(){const k=$('#token').value,jid=$('#bjid').value,text=$('#btext').value;if(!k||!jid||!text)return note('Token, JID, teks wajib diisi',false);const r=await j('/broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:k,jid,text})});note('Broadcast: '+(r.ok?'terkirim \\u2705':('gagal \\u2014 '+(r.error||''))),r.ok)}\r\nrefresh();setInterval(refresh,5000);\r\n</script></body></html>", "text/html; charset=utf-8") : lf_PanelDeny_0_13(c)));
-		CS_cl8_472.app.MapPost("/reload", (Func<IResult>)delegate
+		cl_472.app.MapGet("/admin", (Func<HttpContext, IResult>)((HttpContext c) => cl_472.PanelAuthOk(c) ? Results.Content("<!doctype html><html lang=id><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">\r\n<title>WA Bot \\u2014 Admin</title><style>\r\nbody{font-family:system-ui,sans-serif;margin:0;background:#0f1216;color:#e6e6e6}\r\nheader{background:#16a34a;color:#fff;padding:12px 16px;font-weight:700}\r\n.wrap{padding:16px;max-width:900px;margin:auto}\r\n.card{background:#1a1f26;border:1px solid #2a2f37;border-radius:10px;padding:14px;margin:12px 0}\r\n.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}\r\n.metric{background:#11151a;border-radius:8px;padding:10px;text-align:center}\r\n.metric b{display:block;font-size:1.4rem;color:#16a34a}.metric span{font-size:.78rem;color:#9aa4af}\r\nbutton{background:#16a34a;color:#fff;border:0;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600;margin:2px}\r\nbutton.warn{background:#b45309}button.alt{background:#374151}\r\ninput,textarea{width:100%;box-sizing:border-box;background:#11151a;border:1px solid #2a2f37;color:#e6e6e6;border-radius:8px;padding:8px;margin:4px 0}\r\ntable{width:100%;border-collapse:collapse;font-size:.82rem}td,th{border-bottom:1px solid #2a2f37;padding:6px;text-align:left}\r\n.ok{color:#16a34a}.bad{color:#ef4444}pre{white-space:pre-wrap;font-size:.78rem;color:#9aa4af;max-height:240px;overflow:auto}\r\nh3{margin:.2rem 0 .6rem}</style></head><body>\r\n<header>\\U0001F916 WA Bot \\u2014 Panel Admin (lokal)</header><div class=wrap>\r\n<div class=card><h3>Status</h3><div class=grid id=metrics>memuat\\u2026</div></div>\r\n<div class=card><h3>Aksi cepat</h3>\r\n<input id=token placeholder=\"Token admin (untuk restart/broadcast)\">\r\n<div><button onclick=reload()>Reload config</button>\r\n<button class=alt onclick=\"restart('brain')\">Restart brain</button>\r\n<button class=alt onclick=\"restart('gateway')\">Restart gateway</button>\r\n<button class=warn onclick=\"restart('both')\">Restart both</button></div>\r\n<div id=msg></div></div>\r\n<div class=card><h3>Broadcast</h3>\r\n<input id=bjid placeholder=\"JID grup tujuan (mis. 1203...@g.us)\">\r\n<textarea id=btext placeholder=\"Isi pesan\"></textarea>\r\n<button onclick=broadcast()>Kirim broadcast</button></div>\r\n<div class=card><h3>Grup dikelola</h3><div id=groups>memuat\\u2026</div></div>\r\n<div class=card><h3>Audit moderasi terbaru</h3><pre id=audit>memuat\\u2026</pre></div></div>\r\n<script>\r\nconst $=s=>document.querySelector(s);\r\n$('#token').value=localStorage.getItem('wabotToken')||'';\r\n$('#token').oninput=e=>localStorage.setItem('wabotToken',e.target.value);\r\nasync function j(u,o){const r=await fetch(u,o);try{return await r.json()}catch{return{status:r.status}}}\r\nasync function refresh(){\r\n const s=await j('/stats');if(s.ok){$('#metrics').innerHTML=[\r\n  ['Gateway',s.gatewayConnected?'<span class=ok>OK</span>':'<span class=bad>OFF</span>'],\r\n  ['Terkirim',s.sent],['Gagal',s.failed],['Antre ulang',s.retryQueue],\r\n  ['Puzzle aktif',s.activePuzzles],['Moderasi/hari',s.moderatedToday],\r\n  ['Peringatan',s.warningsTracked],['Grup',s.managedGroups],['Aturan',s.rules],\r\n  ['Uptime(m)',s.uptimeMinutes],['Tidur',s.asleep?'ya':'tidak']\r\n ].map(m=>`<div class=metric><b>${m[1]}</b><span>${m[0]}</span></div>`).join('')}\r\n const g=await j('/admin/groups');$('#groups').innerHTML='<table><tr><th>Label</th><th>JID</th></tr>'+(g.groups||[]).map(x=>`<tr><td>${x.label||''}</td><td>${x.jid}</td></tr>`).join('')+'</table>';\r\n const a=await j('/admin/audit?n=15');$('#audit').textContent=(a.lines||[]).join('\\n')||'(belum ada)';}\r\nfunction note(t,ok){$('#msg').innerHTML=`<p class=\"${ok?'ok':'bad'}\">${t}</p>`}\r\nasync function reload(){const r=await j('/reload',{method:'POST'});note('Reload: '+(r.ok?'OK':'gagal'),r.ok);refresh()}\r\nasync function restart(t){const k=$('#token').value;if(!k)return note('Isi token dulu',false);note('Mengirim restart '+t+'\\u2026',true);await fetch(`/admin/restart?token=${encodeURIComponent(k)}&target=${t}`,{method:'POST'});setTimeout(()=>{note('Perintah restart '+t+' terkirim.',true);refresh()},1800)}\r\nasync function broadcast(){const k=$('#token').value,jid=$('#bjid').value,text=$('#btext').value;if(!k||!jid||!text)return note('Token, JID, teks wajib diisi',false);const r=await j('/broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:k,jid,text})});note('Broadcast: '+(r.ok?'terkirim \\u2705':('gagal \\u2014 '+(r.error||''))),r.ok)}\r\nrefresh();setInterval(refresh,5000);\r\n</script></body></html>", "text/html; charset=utf-8") : PanelDeny(c)));
+		cl_472.app.MapPost("/reload", (Func<IResult>)delegate
 		{
-			CS_cl8_472.lf_ReloadRuntimeConfig_34("manual /reload");
+			cl_472.ReloadRuntimeConfig("manual /reload");
 			return Results.Json(new
 			{
 				ok = true,
-				rules = CS_cl8_472.rules.Count,
-				exempt = CS_cl8_472.exempt.Count
+				rules = cl_472.rules.Count,
+				exempt = cl_472.exempt.Count
 			});
 		});
-		CS_cl8_472.app.MapPost("/admin/restart", (Func<HttpContext, Task<IResult>>)async delegate(HttpContext ctx)
+		cl_472.app.MapPost("/admin/restart", (Func<HttpContext, Task<IResult>>)async delegate(HttpContext ctx)
 		{
-			if (string.IsNullOrWhiteSpace(CS_cl8_472.config.AdminApiToken))
+			if (string.IsNullOrWhiteSpace(cl_472.config.AdminApiToken))
 			{
 				return Results.Json(new
 				{
@@ -4081,7 +4096,7 @@ public class Program
 					error = "endpoint mati (set adminApiToken)"
 				}, (JsonSerializerOptions?)null, (string?)null, (int?)403);
 			}
-			if ((string?)ctx.Request.Query["token"] != CS_cl8_472.config.AdminApiToken)
+			if ((string?)ctx.Request.Query["token"] != cl_472.config.AdminApiToken)
 			{
 				return Results.Json(new
 				{
@@ -4104,12 +4119,12 @@ public class Program
 			{
 				try
 				{
-					await CS_cl8_472.http.PostAsync(CS_cl8_472.config.GatewayUrl + "/admin/restart?token=" + Uri.EscapeDataString(CS_cl8_472.config.AdminApiToken), null);
+					await cl_472.http.PostAsync(cl_472.config.GatewayUrl + "/admin/restart?token=" + Uri.EscapeDataString(cl_472.config.AdminApiToken), null);
 				}
 				catch (Exception ex)
 				{
 					Exception ex2 = ex;
-					CS_cl8_472.app.Logger.LogWarning("Gagal minta gateway restart: {Msg}", ex2.Message);
+					cl_472.app.Logger.LogWarning("Gagal minta gateway restart: {Msg}", ex2.Message);
 				}
 			}
 			if (doBrain)
@@ -4117,7 +4132,7 @@ public class Program
 				Task.Run(async delegate
 				{
 					await Task.Delay(800);
-					CS_cl8_472.app.Logger.LogWarning("Restart brain via /admin/restart");
+					cl_472.app.Logger.LogWarning("Restart brain via /admin/restart");
 					Environment.Exit(0);
 				});
 			}
@@ -4131,26 +4146,26 @@ public class Program
 				}
 			});
 		});
-		CS_cl8_472.app.MapGet("/relay-config", (Func<IResult>)delegate
+		cl_472.app.MapGet("/relay-config", (Func<IResult>)delegate
 		{
-			RelayConfig relay = CS_cl8_472.config.Relay;
+			RelayConfig relay = cl_472.config.Relay;
 			return Results.Json(new
 			{
 				enabled = (relay?.Enabled ?? false),
 				hubGroupJid = (relay?.HubGroupJid ?? ""),
 				command = (relay?.Command ?? "sebar"),
-				prefix = CS_cl8_472.config.CommandPrefix,
+				prefix = cl_472.config.CommandPrefix,
 				targetGroups = (relay?.TargetGroups ?? Array.Empty<string>()),
 				throttleSeconds = (relay?.ThrottleSeconds ?? 4),
 				footer = (relay?.Footer ?? ""),
-				adminNumbers = AdminSync.Effective(CS_cl8_472.config)
+				adminNumbers = AdminSync.Effective(cl_472.config)
 			});
 		});
-		CS_cl8_472.app.MapGet("/announcer-preview", (Func<Task<IResult>>)async delegate
+		cl_472.app.MapGet("/announcer-preview", (Func<Task<IResult>>)async delegate
 		{
-			DC_0_0 DCv_0_ = CS_cl8_472;
-			AnnouncerConfig announcer = CS_cl8_472.config.Announcer;
-			if (announcer == null || !announcer.Enabled || string.IsNullOrWhiteSpace(CS_cl8_472.config.Announcer.TeamId))
+			DC_0_0 DCv_0_ = cl_472;
+			AnnouncerConfig announcer = cl_472.config.Announcer;
+			if (announcer == null || !announcer.Enabled || string.IsNullOrWhiteSpace(cl_472.config.Announcer.TeamId))
 			{
 				return Results.Json(new
 				{
@@ -4158,9 +4173,9 @@ public class Program
 					error = "announcer tidak aktif / teamId kosong"
 				});
 			}
-			List<SwissItem> list = await Announcer.Fetch(CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger);
+			List<SwissItem> list = await Announcer.Fetch(cl_472.config, cl_472.http, cl_472.app.Logger);
 			DateTimeOffset now = DateTimeOffset.UtcNow;
-			int[] reminders = CS_cl8_472.config.Announcer.RemindersMinutes;
+			int[] reminders = cl_472.config.Announcer.RemindersMinutes;
 			var preview = from t in list
 				orderby t.StartsAt
 				select new
@@ -4182,9 +4197,9 @@ public class Program
 				tournaments = preview
 			});
 		});
-		CS_cl8_472.app.MapPost("/incoming", (Func<IncomingMessage, Task<IResult>>)async delegate(IncomingMessage msg)
+		cl_472.app.MapPost("/incoming", (Func<IncomingMessage, Task<IResult>>)async delegate(IncomingMessage msg)
 		{
-			DC_0_0 DCv_0_ = CS_cl8_472;
+			DC_0_0 DCv_0_ = cl_472;
 			if (string.IsNullOrWhiteSpace(msg.Text))
 			{
 				return Results.Json(new
@@ -4201,9 +4216,9 @@ public class Program
 					action = "ignored"
 				});
 			}
-			CS_cl8_472.config.Groups.TryGetValue(msg.Jid, out GroupConfig g);
+			cl_472.config.Groups.TryGetValue(msg.Jid, out GroupConfig g);
 			bool isPrivate = msg.Channel == "whatsapp" && !msg.Jid.EndsWith("@g.us");
-			PrivateChatConfig? privateChat = CS_cl8_472.config.PrivateChat;
+			PrivateChatConfig? privateChat = cl_472.config.PrivateChat;
 			bool? obj;
 			if (privateChat == null)
 			{
@@ -4219,7 +4234,7 @@ public class Program
 			int num;
 			if (isPrivate || isConsole)
 			{
-				PrivateChatConfig privateChat2 = CS_cl8_472.config.PrivateChat;
+				PrivateChatConfig privateChat2 = cl_472.config.PrivateChat;
 				if (privateChat2 != null)
 				{
 					bool enabled = privateChat2.Enabled;
@@ -4235,7 +4250,7 @@ public class Program
 				num = 0;
 			}
 			bool dmAllowed = (byte)num != 0;
-			if (!CS_cl8_472.config.ManageAllGroups && g == null && msg.Channel == "whatsapp" && !dmAllowed)
+			if (!cl_472.config.ManageAllGroups && g == null && msg.Channel == "whatsapp" && !dmAllowed)
 			{
 				return Results.Json(new
 				{
@@ -4243,20 +4258,20 @@ public class Program
 					action = "unmanaged"
 				});
 			}
-			bool eCommands = g?.CommandsEnabled ?? CS_cl8_472.config.CommandsEnabled;
-			bool eFlood = g?.FloodEnabled ?? CS_cl8_472.config.FloodEnabled;
-			bool eModeration = g?.ModerationEnabled ?? CS_cl8_472.config.ModerationEnabled;
+			bool eCommands = g?.CommandsEnabled ?? cl_472.config.CommandsEnabled;
+			bool eFlood = g?.FloodEnabled ?? cl_472.config.FloodEnabled;
+			bool eModeration = g?.ModerationEnabled ?? cl_472.config.ModerationEnabled;
 			string trimmedText = msg.Text.TrimStart();
 			string cmdText = Regex.Replace(trimmedText, "^(\\s*@\\d+\\s*)+", "").TrimStart();
-			bool isCommand = cmdText.StartsWith(CS_cl8_472.config.CommandPrefix);
-			string cmdName = (isCommand ? cmdText.Substring(CS_cl8_472.config.CommandPrefix.Length).TrimStart().Split(' ', 2)[0].ToLowerInvariant() : "");
-			if (!isCommand && (g?.CommandsEnabled ?? CS_cl8_472.config.CommandsEnabled))
+			bool isCommand = cmdText.StartsWith(cl_472.config.CommandPrefix);
+			string cmdName = (isCommand ? cmdText.Substring(cl_472.config.CommandPrefix.Length).TrimStart().Split(' ', 2)[0].ToLowerInvariant() : "");
+			if (!isCommand && (g?.CommandsEnabled ?? cl_472.config.CommandsEnabled))
 			{
-				string natCmd = NaturalIntent.Detect(CS_cl8_472.config, cmdText, msg.MentionedBot);
+				string natCmd = NaturalIntent.Detect(cl_472.config, cmdText, msg.MentionedBot);
 				if (natCmd != null)
 				{
 					isCommand = true;
-					cmdText = CS_cl8_472.config.CommandPrefix + natCmd;
+					cmdText = cl_472.config.CommandPrefix + natCmd;
 					cmdName = natCmd.Split(' ', 2)[0].ToLowerInvariant();
 				}
 			}
@@ -4265,8 +4280,8 @@ public class Program
 			HashSet<string> groupExemptSet = (from text7 in (g?.ExemptNumbers ?? Array.Empty<string>()).Select(NumberUtil.Normalize)
 				where text7.Length > 0
 				select text7).ToHashSet();
-			bool senderExempt = ModUtil.IdInSet(CS_cl8_472.exempt, senderPhone, senderNum) || ModUtil.IdInSet(groupExemptSet, senderPhone, senderNum);
-			QuietHoursConfig quietCfg = g?.QuietHours ?? CS_cl8_472.config.QuietHours;
+			bool senderExempt = ModUtil.IdInSet(cl_472.exempt, senderPhone, senderNum) || ModUtil.IdInSet(groupExemptSet, senderPhone, senderNum);
+			QuietHoursConfig quietCfg = g?.QuietHours ?? cl_472.config.QuietHours;
 			bool quietNow = QuietHours.IsActive(quietCfg, DateTimeOffset.UtcNow);
 			ConvContext ctx = new ConvContext
 			{
@@ -4278,15 +4293,15 @@ public class Program
 				IsExempt = senderExempt,
 				QuietNow = quietNow,
 				GroupLabel = (g?.Label ?? ""),
-				WorkspaceName = (CS_cl8_472.config.Workspace?.Name ?? ""),
+				WorkspaceName = (cl_472.config.Workspace?.Name ?? ""),
 				Topic = TopicStore.Get(msg.Jid)
 			};
-			string outBase = ChannelRoute.Base(CS_cl8_472.config, ctx.Channel);
+			string outBase = ChannelRoute.Base(cl_472.config, ctx.Channel);
 			if (isCommand && (cmdName == "sleep" || cmdName == "wake"))
 			{
 				if (cmdName == "wake")
 				{
-					if (!AdminSync.IsAllowed(CS_cl8_472.config, senderNum, senderPhone))
+					if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
 					{
 						return Results.Json(new
 						{
@@ -4295,7 +4310,7 @@ public class Program
 						});
 					}
 					Sleeper.Set(false);
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = "Judit Polica aktif lagi. Siap bertugas."
@@ -4306,7 +4321,7 @@ public class Program
 						action = "wake"
 					});
 				}
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = "Baik, saya istirahat dulu. Admin bisa membangunkan dengan *!wake*."
@@ -4369,15 +4384,15 @@ public class Program
 					string placePa = PendingAnalysis.Take(paKey);
 					if (placePa != null)
 					{
-						CS_cl8_472.lf_SendTyping_6(msg.Jid, ctx.Channel);
+						cl_472.SendTyping(msg.Jid, ctx.Channel);
 						string fenPa = BoardVision.BuildFullFen(placePa, whitePa.Value);
-						ChessAnalysis.Output oPa = (await ChessAnalysis.Run(fenPa, CS_cl8_472.config.Ai, CS_cl8_472.http, CS_cl8_472.app.Logger)) ?? new ChessAnalysis.Output("Gagal menganalisa.", "");
+						ChessAnalysis.Output oPa = (await ChessAnalysis.Run(fenPa, cl_472.config.Ai, cl_472.http, cl_472.app.Logger)) ?? new ChessAnalysis.Output("Gagal menganalisa.", "");
 						string imgPa = null;
 						if (oPa.Fen.Length > 0)
 						{
 							try
 							{
-								imgPa = BoardRenderer.Render(oPa.Fen, !oPa.Fen.Contains(" w "), CS_cl8_472.puzzleCacheDir, CS_cl8_472.pieceAssetsDir);
+								imgPa = BoardRenderer.Render(oPa.Fen, !oPa.Fen.Contains(" w "), cl_472.puzzleCacheDir, cl_472.pieceAssetsDir);
 							}
 							catch
 							{
@@ -4385,7 +4400,7 @@ public class Program
 						}
 						if (imgPa == null)
 						{
-							await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+							await PostJson(cl_472.http, outBase + "/send", new
 							{
 								jid = msg.Jid,
 								text = "\ud83d\udcf7 " + oPa.Text
@@ -4393,7 +4408,7 @@ public class Program
 						}
 						else
 						{
-							await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send-image", new
+							await PostJson(cl_472.http, outBase + "/send-image", new
 							{
 								jid = msg.Jid,
 								path = imgPa,
@@ -4408,14 +4423,14 @@ public class Program
 					}
 				}
 			}
-			int cooldownSec = g?.CommandCooldownSeconds ?? CS_cl8_472.config.CommandCooldownSeconds;
+			int cooldownSec = g?.CommandCooldownSeconds ?? cl_472.config.CommandCooldownSeconds;
 			int num2;
 			AiConfig ai;
 			if (cooldownSec > 0 && !senderExempt)
 			{
 				if (!isCommand)
 				{
-					ai = CS_cl8_472.config.Ai;
+					ai = cl_472.config.Ai;
 					if (ai != null && ai.Enabled && ai.RequireMention)
 					{
 						num2 = (msg.MentionedBot ? 1 : 0);
@@ -4432,14 +4447,14 @@ public class Program
 			string number;
 			int fcount;
 			string ftext = ftmpl.Replace("@user", "@" + number).Replace("{count}", fcount.ToString());
-			await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+			await PostJson(cl_472.http, outBase + "/send", new
 			{
 				jid = msg.Jid,
 				text = ftext,
 				mentions = new string[1] { msg.Participant }
 			});
-			CS_cl8_472.audit.Write(msg.Jid, msg.Participant, msg.PushName, "flood", fcount, msg.Text);
-			CS_cl8_472.app.Logger.LogInformation("FLOOD dari {Number}, peringatan ke-{Count}", number, fcount);
+			cl_472.audit.Write(msg.Jid, msg.Participant, msg.PushName, "flood", fcount, msg.Text);
+			cl_472.app.Logger.LogInformation("FLOOD dari {Number}, peringatan ke-{Count}", number, fcount);
 			return Results.Json(new
 			{
 				ok = true,
@@ -4449,7 +4464,7 @@ public class Program
 			});
 			IL_117f:
 			bool aiMention = (byte)num2 != 0;
-			if (isCommand && cmdName != "batal" && !CS_cl8_472.cmdCooldown.Allow($"{msg.Jid}|{senderNum}|{cmdName}", cooldownSec))
+			if (isCommand && cmdName != "batal" && !cl_472.cmdCooldown.Allow($"{msg.Jid}|{senderNum}|{cmdName}", cooldownSec))
 			{
 				return Results.Json(new
 				{
@@ -4458,7 +4473,7 @@ public class Program
 					cmd = cmdName
 				});
 			}
-			if (aiMention && !CS_cl8_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|@ai", cooldownSec))
+			if (aiMention && !cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|@ai", cooldownSec))
 			{
 				return Results.Json(new
 				{
@@ -4479,10 +4494,10 @@ public class Program
 						action = "quiet-antireport"
 					});
 				}
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
-					text = "Bot bermasalah? Jangan report nomor. Ketik " + CS_cl8_472.config.CommandPrefix + "admin <kendala>."
+					text = "Bot bermasalah? Jangan report nomor. Ketik " + cl_472.config.CommandPrefix + "admin <kendala>."
 				});
 				return Results.Json(new
 				{
@@ -4494,10 +4509,10 @@ public class Program
 			int num3;
 			if (isPrivate || isConsole)
 			{
-				pcDM = CS_cl8_472.config.PrivateChat;
+				pcDM = cl_472.config.PrivateChat;
 				if (pcDM != null && pcDM.Enabled)
 				{
-					ai = CS_cl8_472.config.Ai;
+					ai = cl_472.config.Ai;
 					if (ai != null)
 					{
 						bool flag3 = ai.Enabled;
@@ -4518,7 +4533,7 @@ public class Program
 			Rule matched;
 			int count;
 			string warnText = warnTmpl.Replace("@user", "@" + number).Replace("{reason}", matched.Reason ?? matched.Name ?? "aturan grup").Replace("{count}", count.ToString());
-			await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+			await PostJson(cl_472.http, outBase + "/send", new
 			{
 				jid = msg.Jid,
 				text = warnText,
@@ -4531,7 +4546,7 @@ public class Program
 			string replyDM;
 			if (isConsole)
 			{
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = replyDM
@@ -4547,7 +4562,7 @@ public class Program
 			{
 				string who = ((!string.IsNullOrWhiteSpace(msg.PushName)) ? msg.PushName : ("@" + senderNum));
 				string head = ((qDM.Length > 0) ? $"\ud83d\udce9 *DM dari {who}:* {qDM}\n\n" : ("\ud83d\udce9 *DM dari " + who + "*\n\n"));
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = consoleJid,
 					text = head + replyDM
@@ -4560,7 +4575,7 @@ public class Program
 				});
 			}
 			string replyJidDM = ((senderPhone.Length > 0) ? (senderPhone + "@s.whatsapp.net") : msg.Jid);
-			await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+			await PostJson(cl_472.http, outBase + "/send", new
 			{
 				jid = replyJidDM,
 				text = replyDM
@@ -4572,8 +4587,8 @@ public class Program
 				replyJid = replyJidDM
 			});
 			IL_aa9d:
-			CS_cl8_472.audit.Write(msg.Jid, msg.Participant, msg.PushName, matched.Id, count, msg.Text);
-			CS_cl8_472.app.Logger.LogInformation("HAPUS dari {Number} (aturan {Rule}), peringatan ke-{Count}{Quiet}", number, matched.Id, count, quietNow ? " [jam tenang]" : "");
+			cl_472.audit.Write(msg.Jid, msg.Participant, msg.PushName, matched.Id, count, msg.Text);
+			cl_472.app.Logger.LogInformation("HAPUS dari {Number} (aturan {Rule}), peringatan ke-{Count}{Quiet}", number, matched.Id, count, quietNow ? " [jam tenang]" : "");
 			return Results.Json(new
 			{
 				ok = true,
@@ -4585,7 +4600,7 @@ public class Program
 			IL_1457:
 			if (num3 != 0)
 			{
-				if (!PrivateChatAccess.IsAllowed(CS_cl8_472.config, pcDM, senderNum, senderPhone))
+				if (!PrivateChatAccess.IsAllowed(cl_472.config, pcDM, senderNum, senderPhone))
 				{
 					return Results.Json(new
 					{
@@ -4593,7 +4608,7 @@ public class Program
 						action = "dm-not-allowed"
 					});
 				}
-				if (cooldownSec > 0 && !CS_cl8_472.cmdCooldown.Allow(msg.Jid + "|dm", Math.Max(cooldownSec, 3)))
+				if (cooldownSec > 0 && !cl_472.cmdCooldown.Allow(msg.Jid + "|dm", Math.Max(cooldownSec, 3)))
 				{
 					return Results.Json(new
 					{
@@ -4609,7 +4624,7 @@ public class Program
 						action = "dm-quiet"
 					});
 				}
-				CS_cl8_472.lf_SendTyping_6(msg.Jid, ctx.Channel);
+				cl_472.SendTyping(msg.Jid, ctx.Channel);
 				string memKeyDM = msg.Jid + "|dm";
 				string convDM = ConvMemory.Recent(memKeyDM);
 				string personaDM = (string.IsNullOrWhiteSpace(pcDM.Persona) ? "" : pcDM.Persona);
@@ -4617,18 +4632,18 @@ public class Program
 				switch ((qDM.Length != 0) ? ChatIntents.Classify(qDM) : ChatIntent.Empty)
 				{
 				case ChatIntent.Schedule:
-					replyDM = await CommandHandler.BuildSchedule(CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger);
+					replyDM = await CommandHandler.BuildSchedule(cl_472.config, cl_472.http, cl_472.app.Logger);
 					break;
 				case ChatIntent.Result:
-					replyDM = await CommandHandler.BuildLatestResult(CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger);
+					replyDM = await CommandHandler.BuildLatestResult(cl_472.config, cl_472.http, cl_472.app.Logger);
 					break;
 				default:
 				{
-					string ansDM = await Ai.Ask(CS_cl8_472.config.Ai, CS_cl8_472.http, (qDM.Length == 0) ? "Halo" : qDM, CS_cl8_472.app.Logger, personaDM, convDM);
+					string ansDM = await Ai.Ask(cl_472.config.Ai, cl_472.http, (qDM.Length == 0) ? "Halo" : qDM, cl_472.app.Logger, personaDM, convDM);
 					replyDM = (string.IsNullOrWhiteSpace(ansDM) ? "Maaf, aku lagi belum bisa menjawab. Coba lagi sebentar ya." : ansDM);
-					if (replyDM.Length > CS_cl8_472.config.Ai.MaxOutputChars)
+					if (replyDM.Length > cl_472.config.Ai.MaxOutputChars)
 					{
-						replyDM = replyDM.Substring(0, CS_cl8_472.config.Ai.MaxOutputChars) + "…";
+						replyDM = replyDM.Substring(0, cl_472.config.Ai.MaxOutputChars) + "…";
 					}
 					break;
 				}
@@ -4638,7 +4653,7 @@ public class Program
 					ConvMemory.Append(memKeyDM, "user", qDM);
 					ConvMemory.Append(memKeyDM, "assistant", replyDM);
 				}
-				string[] cgs = CS_cl8_472.config.PrivateChat?.ConsoleGroupJids;
+				string[] cgs = cl_472.config.PrivateChat?.ConsoleGroupJids;
 				if (cgs != null)
 				{
 					int num4 = cgs.Length;
@@ -4648,34 +4663,34 @@ public class Program
 						goto IL_195b;
 					}
 				}
-				obj5 = CS_cl8_472.config.AdminSyncGroupJid;
+				obj5 = cl_472.config.AdminSyncGroupJid;
 				goto IL_195b;
 			}
-			RelayConfig relay = CS_cl8_472.config.Relay;
-			if (relay != null && relay.Enabled && msg.Jid == CS_cl8_472.config.Relay.HubGroupJid)
+			RelayConfig relay = cl_472.config.Relay;
+			if (relay != null && relay.Enabled && msg.Jid == cl_472.config.Relay.HubGroupJid)
 			{
 				string sessKey = msg.Participant;
 				BroadcastSession sess;
-				lock (CS_cl8_472.sessions.BroadcastLock)
+				lock (cl_472.sessions.BroadcastLock)
 				{
-					CS_cl8_472.sessions.Broadcast.TryGetValue(sessKey, out sess);
+					cl_472.sessions.Broadcast.TryGetValue(sessKey, out sess);
 					if (sess != null && (DateTimeOffset.UtcNow - sess.CreatedAt).TotalMinutes > 5.0)
 					{
-						CS_cl8_472.sessions.Broadcast.Remove(sessKey);
+						cl_472.sessions.Broadcast.Remove(sessKey);
 						sess = null;
 					}
 				}
-				string firstWord = (isCommand ? cmdText.Substring(CS_cl8_472.config.CommandPrefix.Length).Split(' ', 2)[0].ToLowerInvariant() : "");
+				string firstWord = (isCommand ? cmdText.Substring(cl_472.config.CommandPrefix.Length).Split(' ', 2)[0].ToLowerInvariant() : "");
 				if (isCommand && firstWord == "batal")
 				{
 					bool had;
-					lock (CS_cl8_472.sessions.BroadcastLock)
+					lock (cl_472.sessions.BroadcastLock)
 					{
-						had = CS_cl8_472.sessions.Broadcast.Remove(sessKey);
+						had = cl_472.sessions.Broadcast.Remove(sessKey);
 					}
 					if (had)
 					{
-						await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+						await PostJson(cl_472.http, outBase + "/send", new
 						{
 							jid = msg.Jid,
 							text = "Siap, proses sebar saya batalkan."
@@ -4687,11 +4702,11 @@ public class Program
 						action = "relay-cancel"
 					});
 				}
-				if (isCommand && (firstWord == CS_cl8_472.config.Relay.Command.ToLowerInvariant() || firstWord == "announcement" || firstWord == "umumkan"))
+				if (isCommand && (firstWord == cl_472.config.Relay.Command.ToLowerInvariant() || firstWord == "announcement" || firstWord == "umumkan"))
 				{
-					if (!AdminSync.IsAllowed(CS_cl8_472.config, senderNum, senderPhone))
+					if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
 					{
-						await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+						await PostJson(cl_472.http, outBase + "/send", new
 						{
 							jid = msg.Jid,
 							text = "Fitur sebar khusus admin."
@@ -4702,14 +4717,14 @@ public class Program
 							action = "relay-denied"
 						});
 					}
-					string[] cmdParts = cmdText.Substring(CS_cl8_472.config.CommandPrefix.Length).Split(' ', 2);
+					string[] cmdParts = cmdText.Substring(cl_472.config.CommandPrefix.Length).Split(' ', 2);
 					string inlineText = ((cmdParts.Length > 1) ? cmdParts[1].Trim() : "");
 					if ((firstWord == "announcement" || firstWord == "umumkan") && inlineText.Length > 0)
 					{
-						List<string> targets = (CS_cl8_472.config.Relay.TargetGroups ?? Array.Empty<string>()).Where((string value) => !string.IsNullOrWhiteSpace(value)).ToList();
+						List<string> targets = (cl_472.config.Relay.TargetGroups ?? Array.Empty<string>()).Where((string value) => !string.IsNullOrWhiteSpace(value)).ToList();
 						if (targets.Count == 0)
 						{
-							await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+							await PostJson(cl_472.http, outBase + "/send", new
 							{
 								jid = msg.Jid,
 								text = "Belum ada grup tujuan."
@@ -4720,8 +4735,8 @@ public class Program
 								action = "announcement-notarget"
 							});
 						}
-						string outText = (string.IsNullOrWhiteSpace(CS_cl8_472.config.Relay.Footer) ? inlineText : (inlineText + "\n\n" + CS_cl8_472.config.Relay.Footer));
-						int throttleMs = Math.Max(0, CS_cl8_472.config.Relay.ThrottleSeconds) * 1000;
+						string outText = (string.IsNullOrWhiteSpace(cl_472.config.Relay.Footer) ? inlineText : (inlineText + "\n\n" + cl_472.config.Relay.Footer));
+						int throttleMs = Math.Max(0, cl_472.config.Relay.ThrottleSeconds) * 1000;
 						string hubJid = msg.Jid;
 						Task.Run(async delegate
 						{
@@ -4730,7 +4745,7 @@ public class Program
 							{
 								try
 								{
-									if (await lf_PostJson_0_40(DCv_0_.http, ChannelRoute.BaseForJid(DCv_0_.config, tj) + "/send", new
+									if (await PostJson(DCv_0_.http, ChannelRoute.BaseForJid(DCv_0_.config, tj) + "/send", new
 									{
 										jid = tj,
 										text = outText
@@ -4748,13 +4763,13 @@ public class Program
 									await Task.Delay(throttleMs);
 								}
 							}
-							await lf_PostJson_0_40(DCv_0_.http, ChannelRoute.BaseForJid(DCv_0_.config, hubJid) + "/send", new
+							await PostJson(DCv_0_.http, ChannelRoute.BaseForJid(DCv_0_.config, hubJid) + "/send", new
 							{
 								jid = hubJid,
 								text = $"Announcement terkirim ke {okCount}/{targets.Count} grup."
 							});
 						});
-						await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+						await PostJson(cl_472.http, outBase + "/send", new
 						{
 							jid = msg.Jid,
 							text = $"Mengirim announcement ke {targets.Count} grup..."
@@ -4766,14 +4781,14 @@ public class Program
 							targets = targets.Count
 						});
 					}
-					lock (CS_cl8_472.sessions.BroadcastLock)
+					lock (cl_472.sessions.BroadcastLock)
 					{
-						CS_cl8_472.sessions.Broadcast[sessKey] = new BroadcastSession
+						cl_472.sessions.Broadcast[sessKey] = new BroadcastSession
 						{
 							Stage = "text"
 						};
 					}
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = "Mau sebar pesan apa? Ketik pesannya. (!batal untuk batal)"
@@ -4788,18 +4803,18 @@ public class Program
 				{
 					if (sess.Stage == "text")
 					{
-						List<GroupOption> opts = (await lf_FetchGroups_0_37(CS_cl8_472.config.GatewayUrl, CS_cl8_472.http)).Where((GroupOption o) => o.Jid != CS_cl8_472.config.Relay.HubGroupJid && o.Jid.Length > 0).ToList();
-						lock (CS_cl8_472.sessions.BroadcastLock)
+						List<GroupOption> opts = (await FetchGroups(cl_472.config.GatewayUrl, cl_472.http)).Where((GroupOption o) => o.Jid != cl_472.config.Relay.HubGroupJid && o.Jid.Length > 0).ToList();
+						lock (cl_472.sessions.BroadcastLock)
 						{
 							sess.Text = msg.Text.Trim();
 							sess.Options = opts;
 							sess.Stage = "targets";
 							sess.CreatedAt = DateTimeOffset.UtcNow;
 						}
-						await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+						await PostJson(cl_472.http, outBase + "/send", new
 						{
 							jid = msg.Jid,
-							text = lf_TargetPrompt_0_38(opts)
+							text = TargetPrompt(opts)
 						});
 						return Results.Json(new
 						{
@@ -4809,10 +4824,10 @@ public class Program
 					}
 					if (sess.Stage == "targets")
 					{
-						List<GroupOption> chosen = lf_ParseSelection_0_39(msg.Text, sess.Options);
+						List<GroupOption> chosen = ParseSelection(msg.Text, sess.Options);
 						if (chosen.Count == 0)
 						{
-							await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+							await PostJson(cl_472.http, outBase + "/send", new
 							{
 								jid = msg.Jid,
 								text = "Saya belum menangkap pilihan. Balas nomor, semua, atau !batal."
@@ -4824,13 +4839,13 @@ public class Program
 							});
 						}
 						string textToSend = sess.Text;
-						lock (CS_cl8_472.sessions.BroadcastLock)
+						lock (cl_472.sessions.BroadcastLock)
 						{
-							CS_cl8_472.sessions.Broadcast.Remove(sessKey);
+							cl_472.sessions.Broadcast.Remove(sessKey);
 						}
-						string outText2 = (string.IsNullOrWhiteSpace(CS_cl8_472.config.Relay.Footer) ? textToSend : (textToSend + "\n\n" + CS_cl8_472.config.Relay.Footer));
+						string outText2 = (string.IsNullOrWhiteSpace(cl_472.config.Relay.Footer) ? textToSend : (textToSend + "\n\n" + cl_472.config.Relay.Footer));
 						string hubJid2 = msg.Jid;
-						int throttleMs2 = Math.Max(0, CS_cl8_472.config.Relay.ThrottleSeconds) * 1000;
+						int throttleMs2 = Math.Max(0, cl_472.config.Relay.ThrottleSeconds) * 1000;
 						List<string> targetJids = chosen.Select((GroupOption groupOption) => groupOption.Jid).ToList();
 						Task.Run(async delegate
 						{
@@ -4839,7 +4854,7 @@ public class Program
 							{
 								try
 								{
-									if (await lf_PostJson_0_40(DCv_0_.http, ChannelRoute.BaseForJid(DCv_0_.config, tj) + "/send", new
+									if (await PostJson(DCv_0_.http, ChannelRoute.BaseForJid(DCv_0_.config, tj) + "/send", new
 									{
 										jid = tj,
 										text = outText2
@@ -4861,16 +4876,16 @@ public class Program
 									await Task.Delay(throttleMs2);
 								}
 							}
-							await lf_PostJson_0_40(DCv_0_.http, ChannelRoute.BaseForJid(DCv_0_.config, hubJid2) + "/send", new
+							await PostJson(DCv_0_.http, ChannelRoute.BaseForJid(DCv_0_.config, hubJid2) + "/send", new
 							{
 								jid = hubJid2,
 								text = $"Selesai menyebar ke {okCount}/{targetJids.Count} grup."
 							});
 						});
-						await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+						await PostJson(cl_472.http, outBase + "/send", new
 						{
 							jid = msg.Jid,
-							text = $"Menyebar ke {targetJids.Count} grup (jeda {CS_cl8_472.config.Relay.ThrottleSeconds} dtk)..."
+							text = $"Menyebar ke {targetJids.Count} grup (jeda {cl_472.config.Relay.ThrottleSeconds} dtk)..."
 						});
 						return Results.Json(new
 						{
@@ -4883,23 +4898,23 @@ public class Program
 			}
 			string ssKey = msg.Jid + "|" + msg.Participant;
 			StandingsSession ss;
-			lock (CS_cl8_472.sessions.StandingsLock)
+			lock (cl_472.sessions.StandingsLock)
 			{
-				CS_cl8_472.sessions.Standings.TryGetValue(ssKey, out ss);
+				cl_472.sessions.Standings.TryGetValue(ssKey, out ss);
 				if (ss != null && (DateTimeOffset.UtcNow - ss.CreatedAt).TotalMinutes > 3.0)
 				{
-					CS_cl8_472.sessions.Standings.Remove(ssKey);
+					cl_472.sessions.Standings.Remove(ssKey);
 					ss = null;
 				}
 			}
-			string sFirst = (isCommand ? cmdText.Substring(CS_cl8_472.config.CommandPrefix.Length).Split(' ', 2)[0].ToLowerInvariant() : "");
+			string sFirst = (isCommand ? cmdText.Substring(cl_472.config.CommandPrefix.Length).Split(' ', 2)[0].ToLowerInvariant() : "");
 			if (eCommands && isCommand && (sFirst == "standings" || sFirst == "klasemen"))
 			{
-				string[] sp = cmdText.Substring(CS_cl8_472.config.CommandPrefix.Length).Split(' ', 2);
+				string[] sp = cmdText.Substring(cl_472.config.CommandPrefix.Length).Split(' ', 2);
 				if (sp.Length > 1 && int.TryParse(sp[1].Trim(), out var sid))
 				{
-					string r = await CommandHandler.BuildStandings(sid, CS_cl8_472.http, CS_cl8_472.app.Logger);
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					string r = await CommandHandler.BuildStandings(sid, cl_472.http, cl_472.app.Logger);
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = r
@@ -4910,13 +4925,13 @@ public class Program
 						action = "standings"
 					});
 				}
-				List<(string url, string swiss, string name, string date)> recent = await CommandHandler.GetRecentTournaments(CS_cl8_472.http, CS_cl8_472.app.Logger, 5);
+				List<(string url, string swiss, string name, string date)> recent = await CommandHandler.GetRecentTournaments(cl_472.http, cl_472.app.Logger, 5);
 				if (recent.Count == 0)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
-						text = "Daftar belum terbaca. Coba " + CS_cl8_472.config.CommandPrefix + "standings <id>."
+						text = "Daftar belum terbaca. Coba " + cl_472.config.CommandPrefix + "standings <id>."
 					});
 					return Results.Json(new
 					{
@@ -4924,9 +4939,9 @@ public class Program
 						action = "standings-nolist"
 					});
 				}
-				lock (CS_cl8_472.sessions.StandingsLock)
+				lock (cl_472.sessions.StandingsLock)
 				{
-					CS_cl8_472.sessions.Standings[ssKey] = new StandingsSession
+					cl_472.sessions.Standings[ssKey] = new StandingsSession
 					{
 						Options = recent
 					};
@@ -4945,7 +4960,7 @@ public class Program
 					stringBuilder2.AppendLine(ref handler);
 				}
 				sb.Append("(ketik !batal untuk membatalkan)");
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = sb.ToString()
@@ -4958,11 +4973,11 @@ public class Program
 			}
 			if (ss != null && isCommand && sFirst == "batal")
 			{
-				lock (CS_cl8_472.sessions.StandingsLock)
+				lock (cl_472.sessions.StandingsLock)
 				{
-					CS_cl8_472.sessions.Standings.Remove(ssKey);
+					cl_472.sessions.Standings.Remove(ssKey);
 				}
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = "Siap, saya batalkan."
@@ -4976,12 +4991,12 @@ public class Program
 			if (ss != null && !isCommand && int.TryParse(msg.Text.Trim(), out var pick) && pick >= 1 && pick <= ss.Options.Count)
 			{
 				(string url, string swiss, string name, string date) chosen2 = ss.Options[pick - 1];
-				lock (CS_cl8_472.sessions.StandingsLock)
+				lock (cl_472.sessions.StandingsLock)
 				{
-					CS_cl8_472.sessions.Standings.Remove(ssKey);
+					cl_472.sessions.Standings.Remove(ssKey);
 				}
-				string r2 = await CommandHandler.BuildStandingsSmart(chosen2.url, chosen2.swiss, chosen2.name, CS_cl8_472.http, CS_cl8_472.app.Logger);
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				string r2 = await CommandHandler.BuildStandingsSmart(chosen2.url, chosen2.swiss, chosen2.name, cl_472.http, cl_472.app.Logger);
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = r2
@@ -4992,7 +5007,7 @@ public class Program
 					action = "standings-pick"
 				});
 			}
-			CclConfig ccl = CS_cl8_472.config.Ccl;
+			CclConfig ccl = cl_472.config.Ccl;
 			int num5;
 			if (ccl != null)
 			{
@@ -5007,20 +5022,20 @@ public class Program
 			{
 				string csKey = msg.Jid + "|" + msg.Participant;
 				CclSession cs;
-				lock (CS_cl8_472.sessions.CclLock)
+				lock (cl_472.sessions.CclLock)
 				{
-					CS_cl8_472.sessions.Ccl.TryGetValue(csKey, out cs);
+					cl_472.sessions.Ccl.TryGetValue(csKey, out cs);
 					if (cs != null && (DateTimeOffset.UtcNow - cs.CreatedAt).TotalMinutes > 3.0)
 					{
-						CS_cl8_472.sessions.Ccl.Remove(csKey);
+						cl_472.sessions.Ccl.Remove(csKey);
 						cs = null;
 					}
 				}
-				string cFirst = (isCommand ? cmdText.Substring(CS_cl8_472.config.CommandPrefix.Length).Split(' ', 2)[0].ToLowerInvariant() : "");
-				string cclCmd = (string.IsNullOrWhiteSpace(CS_cl8_472.config.Ccl.Command) ? "events" : CS_cl8_472.config.Ccl.Command.ToLowerInvariant());
+				string cFirst = (isCommand ? cmdText.Substring(cl_472.config.CommandPrefix.Length).Split(' ', 2)[0].ToLowerInvariant() : "");
+				string cclCmd = (string.IsNullOrWhiteSpace(cl_472.config.Ccl.Command) ? "events" : cl_472.config.Ccl.Command.ToLowerInvariant());
 				if (eCommands && isCommand && (cFirst == cclCmd || cFirst == "events" || cFirst == "ccl"))
 				{
-					(List<CclEvent> upcoming, List<CclEvent> past) tuple = await Ccl.GetEvents(CS_cl8_472.config.Ccl, CS_cl8_472.http, CS_cl8_472.app.Logger);
+					(List<CclEvent> upcoming, List<CclEvent> past) tuple = await Ccl.GetEvents(cl_472.config.Ccl, cl_472.http, cl_472.app.Logger);
 					List<CclEvent> up = tuple.upcoming;
 					List<CclEvent> past = tuple.past;
 					List<CclEvent> opts2 = new List<CclEvent>();
@@ -5028,7 +5043,7 @@ public class Program
 					opts2.AddRange(past.Take(8));
 					if (opts2.Count == 0)
 					{
-						await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+						await PostJson(cl_472.http, outBase + "/send", new
 						{
 							jid = msg.Jid,
 							text = "Daftar event belum bisa saya ambil sekarang. Silakan coba lagi nanti ya."
@@ -5039,17 +5054,17 @@ public class Program
 							action = "ccl-nolist"
 						});
 					}
-					lock (CS_cl8_472.sessions.CclLock)
+					lock (cl_472.sessions.CclLock)
 					{
-						CS_cl8_472.sessions.Ccl[csKey] = new CclSession
+						cl_472.sessions.Ccl[csKey] = new CclSession
 						{
 							Options = opts2
 						};
 					}
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
-						text = Ccl.BuildList(CS_cl8_472.config.Ccl, opts2)
+						text = Ccl.BuildList(cl_472.config.Ccl, opts2)
 					});
 					return Results.Json(new
 					{
@@ -5059,11 +5074,11 @@ public class Program
 				}
 				if (cs != null && isCommand && cFirst == "batal")
 				{
-					lock (CS_cl8_472.sessions.CclLock)
+					lock (cl_472.sessions.CclLock)
 					{
-						CS_cl8_472.sessions.Ccl.Remove(csKey);
+						cl_472.sessions.Ccl.Remove(csKey);
 					}
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = "Siap, saya batalkan."
@@ -5077,12 +5092,12 @@ public class Program
 				if (cs != null && !isCommand && int.TryParse(msg.Text.Trim(), out var cpick) && cpick >= 1 && cpick <= cs.Options.Count)
 				{
 					CclEvent chosen3 = cs.Options[cpick - 1];
-					lock (CS_cl8_472.sessions.CclLock)
+					lock (cl_472.sessions.CclLock)
 					{
-						CS_cl8_472.sessions.Ccl.Remove(csKey);
+						cl_472.sessions.Ccl.Remove(csKey);
 					}
-					string r3 = await Ccl.BuildView(CS_cl8_472.config.Ccl, chosen3, CS_cl8_472.http, CS_cl8_472.app.Logger);
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					string r3 = await Ccl.BuildView(cl_472.config.Ccl, chosen3, cl_472.http, cl_472.app.Logger);
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = r3
@@ -5094,7 +5109,7 @@ public class Program
 					});
 				}
 			}
-			ai = CS_cl8_472.config.Ai;
+			ai = cl_472.config.Ai;
 			int num6;
 			if (ai != null)
 			{
@@ -5110,13 +5125,13 @@ public class Program
 				string aiQuestion = null;
 				if (isCommand)
 				{
-					string[] parts = cmdText.Substring(CS_cl8_472.config.CommandPrefix.Length).Split(' ', 2);
-					if (((ReadOnlySpan<string>)CS_cl8_472.config.Ai.Commands).Contains(parts[0].ToLowerInvariant()))
+					string[] parts = cmdText.Substring(cl_472.config.CommandPrefix.Length).Split(' ', 2);
+					if (((ReadOnlySpan<string>)cl_472.config.Ai.Commands).Contains(parts[0].ToLowerInvariant()))
 					{
 						aiQuestion = ((parts.Length > 1) ? parts[1].Trim() : "");
 					}
 				}
-				else if (CS_cl8_472.config.Ai.RequireMention && msg.MentionedBot)
+				else if (cl_472.config.Ai.RequireMention && msg.MentionedBot)
 				{
 					aiQuestion = cmdText.Trim();
 				}
@@ -5124,12 +5139,12 @@ public class Program
 				{
 					if (quietNow)
 					{
-						if (!string.IsNullOrWhiteSpace(CS_cl8_472.config.QuietHours?.Notice))
+						if (!string.IsNullOrWhiteSpace(cl_472.config.QuietHours?.Notice))
 						{
-							await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+							await PostJson(cl_472.http, outBase + "/send", new
 							{
 								jid = msg.Jid,
-								text = CS_cl8_472.config.QuietHours.Notice
+								text = cl_472.config.QuietHours.Notice
 							});
 						}
 						return Results.Json(new
@@ -5139,7 +5154,7 @@ public class Program
 						});
 					}
 					string asker = NumberUtil.Normalize(msg.Participant);
-					CS_cl8_472.lf_SendTyping_6(msg.Jid, ctx.Channel);
+					cl_472.SendTyping(msg.Jid, ctx.Channel);
 					string memKey = msg.Jid + "|" + asker;
 					string convHistory = ConvMemory.Recent(memKey);
 					string reply;
@@ -5149,28 +5164,28 @@ public class Program
 						reply = "Bisa. Format: !tanya <pertanyaan>.";
 						break;
 					case ChatIntent.Result:
-						reply = await CommandHandler.BuildLatestResult(CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger);
+						reply = await CommandHandler.BuildLatestResult(cl_472.config, cl_472.http, cl_472.app.Logger);
 						break;
 					case ChatIntent.Schedule:
 					{
-						string sched = await CommandHandler.BuildSchedule(CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger);
+						string sched = await CommandHandler.BuildSchedule(cl_472.config, cl_472.http, cl_472.app.Logger);
 						string hint = g?.EventsHint ?? "Info & hasil turnamen: https://ligacatur.com/";
 						reply = sched + (string.IsNullOrWhiteSpace(hint) ? "" : ("\n\n" + hint));
 						break;
 					}
 					default:
 					{
-						WorkspaceConfig ws = CS_cl8_472.config.Workspace;
+						WorkspaceConfig ws = cl_472.config.Workspace;
 						string wsSuffix = ((ws != null && !string.IsNullOrWhiteSpace(ws.Scope)) ? ("[Workspace: " + ws.Name + "] " + ws.Scope) : "");
 						if (!string.IsNullOrWhiteSpace(ctx.Topic))
 						{
 							wsSuffix = wsSuffix + "\n\nKonteks: percakapan terakhir di chat ini bertema \"" + ctx.Topic + "\". Jaga kesinambungan bila relevan.";
 						}
-						string ans = await Ai.Ask(CS_cl8_472.config.Ai, CS_cl8_472.http, aiQuestion, CS_cl8_472.app.Logger, wsSuffix, convHistory);
+						string ans = await Ai.Ask(cl_472.config.Ai, cl_472.http, aiQuestion, cl_472.app.Logger, wsSuffix, convHistory);
 						reply = (string.IsNullOrWhiteSpace(ans) ? "Maaf, saya belum bisa menjawab dengan baik sekarang. Silakan coba lagi sebentar lagi, atau ketik !help untuk daftar perintah." : ans);
-						if (reply.Length > CS_cl8_472.config.Ai.MaxOutputChars)
+						if (reply.Length > cl_472.config.Ai.MaxOutputChars)
 						{
-							reply = reply.Substring(0, CS_cl8_472.config.Ai.MaxOutputChars) + "…";
+							reply = reply.Substring(0, cl_472.config.Ai.MaxOutputChars) + "…";
 						}
 						break;
 					}
@@ -5196,7 +5211,7 @@ public class Program
 					{
 					}
 					TopicStore.Set(jid, topic);
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = "@" + asker + " " + reply,
@@ -5211,7 +5226,7 @@ public class Program
 			}
 			if (eCommands && isCommand && cmdName == "status")
 			{
-				if (!AdminSync.IsAllowed(CS_cl8_472.config, senderNum, senderPhone))
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
 				{
 					return Results.Json(new
 					{
@@ -5222,7 +5237,7 @@ public class Program
 				string gw;
 				try
 				{
-					gw = ((await CS_cl8_472.http.GetStringAsync(CS_cl8_472.config.GatewayUrl + "/health")).Contains("\"connected\":true") ? "tersambung ✅" : "TIDAK tersambung ⚠\ufe0f");
+					gw = ((await cl_472.http.GetStringAsync(cl_472.config.GatewayUrl + "/health")).Contains("\"connected\":true") ? "tersambung ✅" : "TIDAK tersambung ⚠\ufe0f");
 				}
 				catch
 				{
@@ -5234,9 +5249,9 @@ public class Program
 				StringBuilder stringBuilder3 = stringBuilder;
 				StringBuilder.AppendInterpolatedStringHandler handler = new StringBuilder.AppendInterpolatedStringHandler(47, 2, stringBuilder);
 				handler.AppendLiteral("• Brain: hidup ✅ (");
-				handler.AppendFormatted(CS_cl8_472.rules.Count);
+				handler.AppendFormatted(cl_472.rules.Count);
 				handler.AppendLiteral(" aturan, ");
-				handler.AppendFormatted(CS_cl8_472.warnings.Count);
+				handler.AppendFormatted(cl_472.warnings.Count);
 				handler.AppendLiteral(" riwayat peringatan)");
 				stringBuilder3.AppendLine(ref handler);
 				stringBuilder = st;
@@ -5249,14 +5264,14 @@ public class Program
 				StringBuilder stringBuilder5 = stringBuilder;
 				handler = new StringBuilder.AppendInterpolatedStringHandler(20, 1, stringBuilder);
 				handler.AppendLiteral("• Reminder Lichess: ");
-				AnnouncerConfig announcer = CS_cl8_472.config.Announcer;
+				AnnouncerConfig announcer = cl_472.config.Announcer;
 				handler.AppendFormatted((announcer != null && announcer.Enabled) ? "aktif" : "mati");
 				stringBuilder5.AppendLine(ref handler);
 				stringBuilder = st;
 				StringBuilder stringBuilder6 = stringBuilder;
 				handler = new StringBuilder.AppendInterpolatedStringHandler(23, 1, stringBuilder);
 				handler.AppendLiteral("• Event chess.college: ");
-				ccl = CS_cl8_472.config.Ccl;
+				ccl = cl_472.config.Ccl;
 				handler.AppendFormatted((ccl != null && ccl.Enabled) ? "aktif" : "mati");
 				stringBuilder6.AppendLine(ref handler);
 				stringBuilder = st;
@@ -5269,9 +5284,9 @@ public class Program
 				StringBuilder stringBuilder8 = stringBuilder;
 				handler = new StringBuilder.AppendInterpolatedStringHandler(17, 1, stringBuilder);
 				handler.AppendLiteral("• Grup dikelola: ");
-				handler.AppendFormatted(CS_cl8_472.config.ManageAllGroups ? "semua" : CS_cl8_472.config.Groups.Count.ToString());
+				handler.AppendFormatted(cl_472.config.ManageAllGroups ? "semua" : cl_472.config.Groups.Count.ToString());
 				stringBuilder8.AppendLine(ref handler);
-				int modTodaySt = CS_cl8_472.audit.LinesSince(DateTime.Now.Date).Count((string l) => l.Contains("| HAPUS |") && !l.Contains("aturan=SHADOW:"));
+				int modTodaySt = cl_472.audit.LinesSince(DateTime.Now.Date).Count((string l) => l.Contains("| HAPUS |") && !l.Contains("aturan=SHADOW:"));
 				stringBuilder = st;
 				StringBuilder stringBuilder9 = stringBuilder;
 				handler = new StringBuilder.AppendInterpolatedStringHandler(23, 1, stringBuilder);
@@ -5283,15 +5298,15 @@ public class Program
 				StringBuilder stringBuilder10 = stringBuilder;
 				handler = new StringBuilder.AppendInterpolatedStringHandler(16, 1, stringBuilder);
 				handler.AppendLiteral("• Puzzle aktif: ");
-				handler.AppendFormatted(CS_cl8_472.activePuzzles.Count);
+				handler.AppendFormatted(cl_472.activePuzzles.Count);
 				stringBuilder10.AppendLine(ref handler);
 				stringBuilder = st;
 				StringBuilder stringBuilder11 = stringBuilder;
 				handler = new StringBuilder.AppendInterpolatedStringHandler(28, 1, stringBuilder);
 				handler.AppendLiteral("• Admin terdaftar (!sebar): ");
-				handler.AppendFormatted(CS_cl8_472.config.AdminNumbers.Length);
+				handler.AppendFormatted(cl_472.config.AdminNumbers.Length);
 				stringBuilder11.Append(ref handler);
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = st.ToString()
@@ -5304,7 +5319,7 @@ public class Program
 			}
 			if (eCommands && isCommand && (cmdName == "warnings" || cmdName == "pelanggar"))
 			{
-				if (!AdminSync.IsAllowed(CS_cl8_472.config, senderNum, senderPhone))
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
 				{
 					return Results.Json(new
 					{
@@ -5312,7 +5327,7 @@ public class Program
 						action = "warnings-denied"
 					});
 				}
-				List<(string num, int count)> top = CS_cl8_472.warnings.TopForGroup(msg.Jid, 10);
+				List<(string num, int count)> top = cl_472.warnings.TopForGroup(msg.Jid, 10);
 				StringBuilder wb = new StringBuilder();
 				wb.AppendLine("*Catatan moderasi terbanyak (grup ini)*");
 				StringBuilder stringBuilder;
@@ -5345,14 +5360,14 @@ public class Program
 				StringBuilder stringBuilder13 = stringBuilder;
 				handler = new StringBuilder.AppendInterpolatedStringHandler(141, 3, stringBuilder);
 				handler.AppendLiteral("Total catatan tersimpan (semua grup): ");
-				handler.AppendFormatted(CS_cl8_472.warnings.Count);
+				handler.AppendFormatted(cl_472.warnings.Count);
 				handler.AppendLiteral(". Ketik ");
-				handler.AppendFormatted(CS_cl8_472.config.CommandPrefix);
+				handler.AppendFormatted(cl_472.config.CommandPrefix);
 				handler.AppendLiteral("audit untuk 10 tindakan terakhir, atau ");
-				handler.AppendFormatted(CS_cl8_472.config.CommandPrefix);
+				handler.AppendFormatted(cl_472.config.CommandPrefix);
 				handler.AppendLiteral("percaya (balas pesan) untuk membuka akses/reset catatan.");
 				stringBuilder13.Append(ref handler);
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = wb.ToString()
@@ -5365,7 +5380,7 @@ public class Program
 			}
 			if (eCommands && isCommand && cmdName == "audit")
 			{
-				if (!AdminSync.IsAllowed(CS_cl8_472.config, senderNum, senderPhone))
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
 				{
 					return Results.Json(new
 					{
@@ -5373,13 +5388,13 @@ public class Program
 						action = "audit-denied"
 					});
 				}
-				List<string> lines = CS_cl8_472.audit.Tail(10);
+				List<string> lines = cl_472.audit.Tail(10);
 				string body = ((lines.Count == 0) ? "Belum ada catatan audit." : string.Join("\n", lines));
 				if (body.Length > 3500)
 				{
 					body = body.Substring(body.Length - 3500);
 				}
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = "\ud83d\udcdc *Audit moderasi (terbaru)*\n" + body
@@ -5392,7 +5407,7 @@ public class Program
 			}
 			if (eCommands && isCommand && cmdName == "modreport")
 			{
-				if (!AdminSync.IsAllowed(CS_cl8_472.config, senderNum, senderPhone))
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
 				{
 					return Results.Json(new
 					{
@@ -5400,8 +5415,8 @@ public class Program
 						action = "modreport-denied"
 					});
 				}
-				string rep = ModerationReport.Build(CS_cl8_472.audit, CS_cl8_472.config, DateTime.Now.AddHours(-24.0));
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				string rep = ModerationReport.Build(cl_472.audit, cl_472.config, DateTime.Now.AddHours(-24.0));
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = rep
@@ -5414,7 +5429,7 @@ public class Program
 			}
 			if (eCommands && isCommand && cmdName == "percaya")
 			{
-				if (!AdminSync.IsAllowed(CS_cl8_472.config, senderNum, senderPhone))
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
 				{
 					return Results.Json(new
 					{
@@ -5424,10 +5439,10 @@ public class Program
 				}
 				if (string.IsNullOrWhiteSpace(msg.QuotedAuthor))
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
-						text = "Cara pakai: balas (reply) pesan anggota yang ingin dibuka aksesnya, lalu ketik " + CS_cl8_472.config.CommandPrefix + "percaya. Bot akan membuka akses awalnya dan merapikan catatan moderasinya."
+						text = "Cara pakai: balas (reply) pesan anggota yang ingin dibuka aksesnya, lalu ketik " + cl_472.config.CommandPrefix + "percaya. Bot akan membuka akses awalnya dan merapikan catatan moderasinya."
 					});
 					return Results.Json(new
 					{
@@ -5436,15 +5451,15 @@ public class Program
 					});
 				}
 				string targetNum = NumberUtil.Normalize(msg.QuotedAuthor);
-				bool wasProbation = CS_cl8_472.joins.Clear(targetNum);
-				bool hadWarn = CS_cl8_472.warnings.Reset(msg.Jid + "|" + msg.QuotedAuthor);
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				bool wasProbation = cl_472.joins.Clear(targetNum);
+				bool hadWarn = cl_472.warnings.Reset(msg.Jid + "|" + msg.QuotedAuthor);
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = $"{targetNum} sudah ditandai aman - {(wasProbation ? "akses awal dibuka" : "akses sudah normal")}, {(hadWarn ? "catatan moderasi direset" : "tidak ada catatan moderasi")}.",
 					mentions = new string[1] { msg.QuotedAuthor }
 				});
-				CS_cl8_472.app.Logger.LogInformation("PERCAYA {Target} oleh admin {Admin}", targetNum, senderNum);
+				cl_472.app.Logger.LogInformation("PERCAYA {Target} oleh admin {Admin}", targetNum, senderNum);
 				return Results.Json(new
 				{
 					ok = true,
@@ -5454,10 +5469,10 @@ public class Program
 			}
 			if (eCommands && isCommand && (cmdName == "lapor" || cmdName == "admin"))
 			{
-				string laporTo = ((!string.IsNullOrWhiteSpace(CS_cl8_472.config.LaporGroupJid)) ? CS_cl8_472.config.LaporGroupJid : (CS_cl8_472.config.Relay?.HubGroupJid ?? ""));
+				string laporTo = ((!string.IsNullOrWhiteSpace(cl_472.config.LaporGroupJid)) ? cl_472.config.LaporGroupJid : (cl_472.config.Relay?.HubGroupJid ?? ""));
 				if (string.IsNullOrWhiteSpace(laporTo))
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = "Fitur lapor belum siap karena grup admin tujuan belum diset."
@@ -5468,7 +5483,7 @@ public class Program
 						action = "lapor-noconfig"
 					});
 				}
-				string[] lp = cmdText.Substring(CS_cl8_472.config.CommandPrefix.Length).Split(' ', 2);
+				string[] lp = cmdText.Substring(cl_472.config.CommandPrefix.Length).Split(' ', 2);
 				string note = ((lp.Length > 1) ? lp[1].Trim() : "");
 				StringBuilder stringBuilder;
 				StringBuilder.AppendInterpolatedStringHandler handler;
@@ -5504,12 +5519,12 @@ public class Program
 							handler.AppendFormatted(note);
 							stringBuilder16.AppendLine(ref handler);
 						}
-						await lf_PostJson_0_40(CS_cl8_472.http, ChannelRoute.BaseForJid(CS_cl8_472.config, laporTo) + "/send", new
+						await PostJson(cl_472.http, ChannelRoute.BaseForJid(cl_472.config, laporTo) + "/send", new
 						{
 							jid = laporTo,
 							text = call.ToString()
 						});
-						await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+						await PostJson(cl_472.http, outBase + "/send", new
 						{
 							jid = msg.Jid,
 							text = "Admin sudah saya panggil. Jelaskan singkat ya."
@@ -5520,10 +5535,10 @@ public class Program
 							action = "admin-called"
 						});
 					}
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
-						text = $"Report pesan: reply lalu {CS_cl8_472.config.CommandPrefix}lapor. Panggil admin: {CS_cl8_472.config.CommandPrefix}admin <catatan>."
+						text = $"Report pesan: reply lalu {cl_472.config.CommandPrefix}lapor. Panggil admin: {cl_472.config.CommandPrefix}admin <catatan>."
 					});
 					return Results.Json(new
 					{
@@ -5578,12 +5593,12 @@ public class Program
 				handler.AppendFormatted(snippet);
 				handler.AppendLiteral("”");
 				stringBuilder21.Append(ref handler);
-				await lf_PostJson_0_40(CS_cl8_472.http, ChannelRoute.BaseForJid(CS_cl8_472.config, laporTo) + "/send", new
+				await PostJson(cl_472.http, ChannelRoute.BaseForJid(cl_472.config, laporTo) + "/send", new
 				{
 					jid = laporTo,
 					text = rep2.ToString()
 				});
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = "Terima kasih, laporanmu sudah diteruskan ke admin. \ud83d\ude4f"
@@ -5594,7 +5609,7 @@ public class Program
 					action = "lapor"
 				});
 			}
-			PuzzleConfig pzc = CS_cl8_472.config.Puzzle;
+			PuzzleConfig pzc = cl_472.config.Puzzle;
 			int num8;
 			if (pzc != null)
 			{
@@ -5607,9 +5622,9 @@ public class Program
 			}
 			if (((uint)num8 & (eCommands ? 1u : 0u) & (isCommand ? 1u : 0u)) != 0 && cmdName == pzc.Command && (g?.PuzzleCommandEnabled ?? pzc.CommandEnabled))
 			{
-				if (CS_cl8_472.puzzlePool.Count == 0)
+				if (cl_472.puzzlePool.Count == 0)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = "Puzzle belum siap. Coba lagi nanti."
@@ -5621,16 +5636,16 @@ public class Program
 					});
 				}
 				ActivePuzzle cur;
-				lock (CS_cl8_472.puzzleLock)
+				lock (cl_472.puzzleLock)
 				{
-					CS_cl8_472.activePuzzles.TryGetValue(msg.Jid, out cur);
+					cl_472.activePuzzles.TryGetValue(msg.Jid, out cur);
 				}
 				if (cur != null && !cur.Revealed)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
-						text = "Puzzle masih berjalan. Balas langkahmu, atau ketik " + CS_cl8_472.config.CommandPrefix + pzc.SolveCommand + " nanti."
+						text = "Puzzle masih berjalan. Balas langkahmu, atau ketik " + cl_472.config.CommandPrefix + pzc.SolveCommand + " nanti."
 					});
 					return Results.Json(new
 					{
@@ -5640,22 +5655,22 @@ public class Program
 				}
 				if (cur != null && cur.Revealed && (DateTime.UtcNow - cur.SolvedAt).TotalSeconds < 12.0)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new { jid = msg.Jid, text = "Puzzle barusan selesai. Santai dulu sebentar ya — ketik " + CS_cl8_472.config.CommandPrefix + "peringkat untuk papan skor." });
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Puzzle barusan selesai. Santai dulu sebentar ya — ketik " + cl_472.config.CommandPrefix + "peringkat untuk papan skor." });
 					return Results.Json(new { ok = true, action = "puzzle-cooldown" });
 				}
-				if (!CS_cl8_472.cmdCooldown.Allow(msg.Jid + "|pznew", 12))
+				if (!cl_472.cmdCooldown.Allow(msg.Jid + "|pznew", 12))
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new { jid = msg.Jid, text = "Sabar ya, puzzle baru bisa diminta tiap beberapa detik. Coba lagi sebentar." });
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Sabar ya, puzzle baru bisa diminta tiap beberapa detik. Coba lagi sebentar." });
 					return Results.Json(new { ok = true, action = "puzzle-ratelimited" });
 				}
-				await CS_cl8_472.lf_PostPuzzleAsync_32(msg.Jid, false, null, PuzzleMove.DifficultySlot(cmdText, pzc.RevealMinutes));
+				await cl_472.PostPuzzleAsync(msg.Jid, false, null, PuzzleMove.DifficultySlot(cmdText, pzc.RevealMinutes));
 				return Results.Json(new
 				{
 					ok = true,
 					action = "puzzle"
 				});
 			}
-			PuzzleConfig zc2 = CS_cl8_472.config.Puzzle;
+			PuzzleConfig zc2 = cl_472.config.Puzzle;
 			int num9;
 			if (zc2 != null)
 			{
@@ -5669,25 +5684,25 @@ public class Program
 			if (((uint)num9 & (eCommands ? 1u : 0u) & (isCommand ? 1u : 0u)) != 0 && (cmdName == zc2.SolveCommand || cmdName == "nyerah" || cmdName == "menyerah"))
 			{
 				ActivePuzzle ap;
-				lock (CS_cl8_472.puzzleLock)
+				lock (cl_472.puzzleLock)
 				{
-					CS_cl8_472.activePuzzles.TryGetValue(msg.Jid, out ap);
+					cl_472.activePuzzles.TryGetValue(msg.Jid, out ap);
 				}
 				if (ap == null)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
-						text = "Belum ada puzzle aktif. Mulai: " + CS_cl8_472.config.CommandPrefix + zc2.Command + "."
+						text = "Belum ada puzzle aktif. Mulai: " + cl_472.config.CommandPrefix + zc2.Command + "."
 					});
 				}
 				else if (ap.Revealed || ap.WrongCount >= 6 || !(DateTimeOffset.UtcNow.UtcDateTime < ap.PostedAt.AddMinutes(g?.PuzzleSolveAfterMinutes ?? zc2.SolveAfterMinutes)))
 				{
-					await CS_cl8_472.lf_RevealPuzzleAsync_33(msg.Jid, ap, false);
+					await cl_472.RevealPuzzleAsync(msg.Jid, ap, false);
 				}
 				else
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = zc2.TryHarderMessage
@@ -5699,7 +5714,7 @@ public class Program
 					action = "solusi"
 				});
 			}
-			PuzzleConfig puzzle = CS_cl8_472.config.Puzzle;
+			PuzzleConfig puzzle = cl_472.config.Puzzle;
 			int num10;
 			if (puzzle != null)
 			{
@@ -5765,7 +5780,7 @@ public class Program
 					sb2.Append("\nKetik langkah saat puzzle harian untuk naik peringkat ♟\ufe0f");
 					text3 = sb2.ToString();
 				}
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = text3
@@ -5776,7 +5791,7 @@ public class Program
 					action = "peringkat"
 				});
 			}
-			puzzle = CS_cl8_472.config.Puzzle;
+			puzzle = cl_472.config.Puzzle;
 			int num12;
 			if (puzzle != null)
 			{
@@ -5789,7 +5804,7 @@ public class Program
 			}
 			if (((uint)num12 & (eCommands ? 1u : 0u) & (isCommand ? 1u : 0u)) != 0 && cmdName == "resetperingkat")
 			{
-				if (!AdminSync.IsAllowed(CS_cl8_472.config, senderNum, senderPhone))
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
 				{
 					return Results.Json(new
 					{
@@ -5798,7 +5813,7 @@ public class Program
 					});
 				}
 				bool had2 = PuzzleScoreStore.Reset(msg.Jid);
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+				await PostJson(cl_472.http, outBase + "/send", new
 				{
 					jid = msg.Jid,
 					text = (had2 ? "Papan peringkat puzzle grup ini sudah direset. \ud83e\uddf9" : "Belum ada skor untuk direset.")
@@ -5832,7 +5847,7 @@ public class Program
 			{
 				if (!StockfishEngine.Available)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = "Engine analisa belum siap di server."
@@ -5843,7 +5858,7 @@ public class Program
 						action = "analisa-noengine"
 					});
 				}
-				if (!CS_cl8_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|analisa", 8))
+				if (!cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|analisa", 8))
 				{
 					return Results.Json(new
 					{
@@ -5867,7 +5882,7 @@ public class Program
 						byte[] imgBytes = null;
 						try
 						{
-							using HttpResponseMessage rsp = await CS_cl8_472.http.PostAsync(outBase + "/get-media", new StringContent(JsonSerializer.Serialize(new
+							using HttpResponseMessage rsp = await cl_472.http.PostAsync(outBase + "/get-media", new StringContent(JsonSerializer.Serialize(new
 							{
 								id = mediaId
 							}), Encoding.UTF8, "application/json"));
@@ -5896,7 +5911,7 @@ public class Program
 						}
 						if (imgBytes == null)
 						{
-							await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+							await PostJson(cl_472.http, outBase + "/send", new
 							{
 								jid = msg.Jid,
 								text = "Tak bisa ambil gambarnya. Kirim ulang gambar papan + caption !analisa ya."
@@ -5907,10 +5922,10 @@ public class Program
 								action = "analisa-nomedia"
 							});
 						}
-						string placement = BoardVision.RecognizeFen(imgBytes, CS_cl8_472.pieceAssetsDir);
+						string placement = BoardVision.RecognizeFen(imgBytes, cl_472.pieceAssetsDir);
 						if (placement == null)
 						{
-							await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+							await PostJson(cl_472.http, outBase + "/send", new
 							{
 								jid = msg.Jid,
 								text = "Gagal membaca papan dari gambar. Pastikan screenshot papan (Lichess/Chess.com) yang jelas, hanya papannya."
@@ -5927,7 +5942,7 @@ public class Program
 							string imgAsk = null;
 							try
 							{
-								imgAsk = BoardRenderer.Render(BoardVision.BuildFullFen(placement, true), false, CS_cl8_472.puzzleCacheDir, CS_cl8_472.pieceAssetsDir);
+								imgAsk = BoardRenderer.Render(BoardVision.BuildFullFen(placement, true), false, cl_472.puzzleCacheDir, cl_472.pieceAssetsDir);
 							}
 							catch
 							{
@@ -5935,7 +5950,7 @@ public class Program
 							string ask = "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(kalau ada bidak salah baca, kirim FEN-nya)";
 							if (imgAsk == null)
 							{
-								await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+								await PostJson(cl_472.http, outBase + "/send", new
 								{
 									jid = msg.Jid,
 									text = ask
@@ -5943,7 +5958,7 @@ public class Program
 							}
 							else
 							{
-								await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send-image", new
+								await PostJson(cl_472.http, outBase + "/send-image", new
 								{
 									jid = msg.Jid,
 									path = imgAsk,
@@ -5961,7 +5976,7 @@ public class Program
 					}
 					else if (argAn.Length == 0)
 					{
-						await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+						await PostJson(cl_472.http, outBase + "/send", new
 						{
 							jid = msg.Jid,
 							text = "Kirim *FEN*/*PGN*, atau kirim *GAMBAR* papan (screenshot Lichess/Chess.com) dengan caption *!analisa* (tambah 'hitam' kalau giliran Hitam)."
@@ -5973,15 +5988,15 @@ public class Program
 						});
 					}
 				}
-				CS_cl8_472.lf_SendTyping_6(msg.Jid, ctx.Channel);
-				ChessAnalysis.Output outp = (await ChessAnalysis.Run(argAn, CS_cl8_472.config.Ai, CS_cl8_472.http, CS_cl8_472.app.Logger)) ?? new ChessAnalysis.Output("Gagal menganalisa.", "");
+				cl_472.SendTyping(msg.Jid, ctx.Channel);
+				ChessAnalysis.Output outp = (await ChessAnalysis.Run(argAn, cl_472.config.Ai, cl_472.http, cl_472.app.Logger)) ?? new ChessAnalysis.Output("Gagal menganalisa.", "");
 				string capAn = noteAn + outp.Text;
 				string imgAn = null;
 				if (outp.Fen.Length > 0)
 				{
 					try
 					{
-						imgAn = BoardRenderer.Render(outp.Fen, !outp.Fen.Contains(" w "), CS_cl8_472.puzzleCacheDir, CS_cl8_472.pieceAssetsDir);
+						imgAn = BoardRenderer.Render(outp.Fen, !outp.Fen.Contains(" w "), cl_472.puzzleCacheDir, cl_472.pieceAssetsDir);
 					}
 					catch
 					{
@@ -5989,7 +6004,7 @@ public class Program
 				}
 				if (imgAn == null)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = capAn
@@ -5997,7 +6012,7 @@ public class Program
 				}
 				else
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send-image", new
+					await PostJson(cl_472.http, outBase + "/send-image", new
 					{
 						jid = msg.Jid,
 						path = imgAn,
@@ -6010,7 +6025,7 @@ public class Program
 					action = "analisa"
 				});
 			}
-			puzzle = CS_cl8_472.config.Puzzle;
+			puzzle = cl_472.config.Puzzle;
 			int num15;
 			if (puzzle != null)
 			{
@@ -6024,15 +6039,15 @@ public class Program
 			if (num15 != 0)
 			{
 				ActivePuzzle pap;
-				lock (CS_cl8_472.puzzleLock)
+				lock (cl_472.puzzleLock)
 				{
-					if (msg.QuotedId.Length > 0 && CS_cl8_472.puzzleByMsg.TryGetValue(msg.QuotedId, out ActivePuzzle byMsg))
+					if (msg.QuotedId.Length > 0 && cl_472.puzzleByMsg.TryGetValue(msg.QuotedId, out ActivePuzzle byMsg))
 					{
 						pap = byMsg;
 					}
 					else
 					{
-						CS_cl8_472.activePuzzles.TryGetValue(msg.Jid, out pap);
+						cl_472.activePuzzles.TryGetValue(msg.Jid, out pap);
 					}
 				}
 				JsonElement _idEl;
@@ -6044,7 +6059,7 @@ public class Program
 					if (PuzzleMove.IsMoveLike(attempt))
 					{
 						int idx;
-						lock (CS_cl8_472.puzzleLock)
+						lock (cl_472.puzzleLock)
 						{
 							idx = pap.Progress;
 						}
@@ -6053,7 +6068,7 @@ public class Program
 							string oppMove = null;
 							bool done;
 							int prog;
-							lock (CS_cl8_472.puzzleLock)
+							lock (cl_472.puzzleLock)
 							{
 								pap.Progress++;
 								if (pap.Progress < sol.Length)
@@ -6074,12 +6089,12 @@ public class Program
 									pap.SolverJids.Add(msg.Participant);
 								}
 							}
-							CS_cl8_472.lf_SaveActivePuzzles_30();
+							cl_472.SaveActivePuzzles();
 							int pts = PuzzleScoreStore.Tier(pap.Puzzle.Rating);
 							PuzzleScoreStore.Award(msg.Jid, senderNum, msg.PushName, pts, done);
 							try
 							{
-								await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/react", new
+								await PostJson(cl_472.http, outBase + "/react", new
 								{
 									jid = msg.Jid,
 									key = msg.Key,
@@ -6093,7 +6108,7 @@ public class Program
 							{
 								List<string> helperNums = new List<string>();
 								List<string> mentionList = new List<string> { msg.Participant };
-								lock (CS_cl8_472.puzzleLock)
+								lock (cl_472.puzzleLock)
 								{
 									for (int i4 = 0; i4 < pap.SolverNums.Count; i4++)
 									{
@@ -6116,10 +6131,10 @@ public class Program
 										string nm2 = (string.IsNullOrWhiteSpace(topN[i5].Name) ? "Pemain" : topN[i5].Name);
 										parts2.Add($"{md[i5]} {nm2} ({topN[i5].Points})");
 									}
-									board = $"\n\n\ud83c\udfc6 *Peringkat:* {string.Join(" · ", parts2)}\n_Ketik {CS_cl8_472.config.CommandPrefix}peringkat untuk lengkap_";
+									board = $"\n\n\ud83c\udfc6 *Peringkat:* {string.Join(" · ", parts2)}\n_Ketik {cl_472.config.CommandPrefix}peringkat untuk lengkap_";
 								}
 								string t = ((oppMove == null) ? $"✅ *Tepat sekali, @{senderNum}!* \ud83c\udf89 Itu jurus pamungkasnya — puzzle selesai. Keren! (+{pts} poin) ♟\ufe0f{credit}{board}" : $"✅ *Tepat sekali, @{senderNum}!* Lawan terpaksa main *{oppMove}*, dan itu menutup variannya. \ud83c\udf89 Puzzle selesai, mantap! (+{pts} poin) ♟\ufe0f{credit}{board}");
-								await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+								await PostJson(cl_472.http, outBase + "/send", new
 								{
 									jid = msg.Jid,
 									text = t + PuzzleMove.ThemeNote(pap.Puzzle.Themes),
@@ -6136,7 +6151,7 @@ public class Program
 								{
 									try
 									{
-										img = BoardRenderer.Render(fens[prog - 1], pap.Puzzle.Side == "b", CS_cl8_472.puzzleCacheDir, CS_cl8_472.pieceAssetsDir);
+										img = BoardRenderer.Render(fens[prog - 1], pap.Puzzle.Side == "b", cl_472.puzzleCacheDir, cl_472.pieceAssetsDir);
 									}
 									catch
 									{
@@ -6144,7 +6159,7 @@ public class Program
 								}
 								if (img == null)
 								{
-									await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+									await PostJson(cl_472.http, outBase + "/send", new
 									{
 										jid = msg.Jid,
 										text = cap,
@@ -6154,7 +6169,7 @@ public class Program
 								}
 								else
 								{
-									await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send-image", new
+									await PostJson(cl_472.http, outBase + "/send-image", new
 									{
 										jid = msg.Jid,
 										path = img,
@@ -6182,9 +6197,9 @@ public class Program
 						}
 						if (alreadyPlayed)
 						{
-							if (CS_cl8_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzplayed", 8))
+							if (cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzplayed", 8))
 							{
-								await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/react", new
+								await PostJson(cl_472.http, outBase + "/react", new
 								{
 									jid = msg.Jid,
 									key = msg.Key,
@@ -6197,7 +6212,7 @@ public class Program
 								action = "puzzle-already"
 							});
 						}
-						bool isReplyToPuzzle = msg.QuotedId.Length > 0 && (msg.QuotedId == pap.MsgId || CS_cl8_472.puzzleByMsg.ContainsKey(msg.QuotedId));
+						bool isReplyToPuzzle = msg.QuotedId.Length > 0 && (msg.QuotedId == pap.MsgId || cl_472.puzzleByMsg.ContainsKey(msg.QuotedId));
 						bool strongChess = Regex.IsMatch(attempt, "[KQRBNGMx=+#]") || attempt.Contains("O-O") || attempt.Contains("0-0");
 						if (!isReplyToPuzzle && !strongChess)
 						{
@@ -6208,16 +6223,16 @@ public class Program
 							});
 						}
 						pap.WrongCount++;
-						if (CS_cl8_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzwrong", (pap.WrongCount <= 3) ? 10 : 25) && CS_cl8_472.cmdCooldown.Allow(msg.Jid + "|pzwrongAny", (pap.WrongCount <= 3) ? 4 : 25))
+						if (cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzwrong", (pap.WrongCount <= 3) ? 10 : 25) && cl_472.cmdCooldown.Allow(msg.Jid + "|pzwrongAny", (pap.WrongCount <= 3) ? 4 : 25))
 						{
 							// nama tampil lewat mention @senderNum (di-tag agar pemain ke-notify)
 							string nextSanW = (idx < sol.Length) ? sol[idx] : "";
 							string text4 = (pap.WrongCount <= 3) ? ("Belum pas, @" + senderNum + ". " + PuzzleMove.LocalWrongHint(nextSanW, pap.WrongCount)) : ("Belum pas, @" + senderNum + ".");
 							if (pap.WrongCount >= 4 && !pap.SolveHintShown)
 							{
-								text4 += "\n\nKetik " + CS_cl8_472.config.CommandPrefix + (CS_cl8_472.config.Puzzle?.SolveCommand ?? "solusi") + " untuk lihat jawabannya."; pap.SolveHintShown = true;
+								text4 += "\n\nKetik " + cl_472.config.CommandPrefix + (cl_472.config.Puzzle?.SolveCommand ?? "solusi") + " untuk lihat jawabannya."; pap.SolveHintShown = true;
 							}
-							await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+							await PostJson(cl_472.http, outBase + "/send", new
 							{
 								jid = msg.Jid,
 								text = text4,
@@ -6231,7 +6246,7 @@ public class Program
 							action = "puzzle-wrong"
 						});
 					}
-					ai = CS_cl8_472.config.Ai;
+					ai = cl_472.config.Ai;
 					int num17;
 					if (ai != null)
 					{
@@ -6249,18 +6264,18 @@ public class Program
 						bool chessCue = Regex.IsMatch(low, "(langkah|soal|solusi|jawab|posisi|skak|sekak|bidak|menteri|benteng|kuda|gajah|\\braja\\b|pion|puzzle|kenapa|knp|napa|kok|gimana|gmn|gmna|jelas|maksud|salah)");
 						bool isReplyToThis = msg.QuotedId.Length > 0 && msg.QuotedId == pap.MsgId;
 						bool relevant = chessCue || isReplyToThis || msg.MentionedBot;
-						if ((low.Contains('?') || chessCue) && !otherTopic && relevant && CS_cl8_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzask", 15))
+						if ((low.Contains('?') || chessCue) && !otherTopic && relevant && cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzask", 15))
 						{
 							string sideT2 = ((pap.Puzzle.Side == "w") ? "Putih" : "Hitam");
-							string solLine2 = lf_FormatPuzzleSolution_0_31(pap.Puzzle);
+							string solLine2 = FormatPuzzleSolution(pap.Puzzle);
 							string prompt2 = $"Ini puzzle catur yang BELUM diselesaikan pemain. Posisi FEN: {pap.Puzzle.Fen}. {sideT2} yang jalan. Langkah terbaik menurut mesin (RAHASIA, untuk pemahamanmu saja): {solLine2}. Pemain bertanya/berkomentar: \"{msg.Text.Trim()}\". " + "Jawab 1-3 kalimat pendek, ramah, Bahasa Indonesia natural. Jelaskan alasan posisi atau konsekuensi dari pertanyaan pemain. Kalau pemain menanyakan langkah yang belum pas, jawab seperti teman latihan: ringan, jelas, dan tidak menggurui. Jangan pakai istilah 'refutasi', 'konkret', 'varian', 'aku belum yakin', atau 'tidak mau asal menebak'. Kalau tidak yakin detailnya, beri arahan umum tanpa mengarang. JANGAN memberi kandidat langkah terbaik untuk pemain. JANGAN sebut atau parafrasekan langkah terbaik/solusi rahasia.";
-							string ans3 = await Ai.Ask(CS_cl8_472.config.Ai, CS_cl8_472.http, prompt2, CS_cl8_472.app.Logger);
+							string ans3 = await Ai.Ask(cl_472.config.Ai, cl_472.http, prompt2, cl_472.app.Logger);
 							string reply2 = (string.IsNullOrWhiteSpace(ans3) ? "Maaf, aku belum bisa menjelaskan dengan baik sekarang. Silakan coba lagi sebentar ya." : PuzzleMove.HumanizeWrongExplanation(PuzzleMove.CleanWrongExplanation(ans3, sol)));
-							if (reply2.Length > CS_cl8_472.config.Ai.MaxOutputChars)
+							if (reply2.Length > cl_472.config.Ai.MaxOutputChars)
 							{
-								reply2 = reply2.Substring(0, CS_cl8_472.config.Ai.MaxOutputChars) + "…";
+								reply2 = reply2.Substring(0, cl_472.config.Ai.MaxOutputChars) + "…";
 							}
-							await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+							await PostJson(cl_472.http, outBase + "/send", new
 							{
 								jid = msg.Jid,
 								text = "@" + senderNum + " " + reply2,
@@ -6279,7 +6294,7 @@ public class Program
 				{
 					string attempt2 = cmdText.TrimStart('!', ' ').Trim();
 					bool recent2 = (DateTime.UtcNow - pap.SolvedAt).TotalMinutes <= 3.0 || (msg.QuotedId.Length > 0 && msg.QuotedId == pap.MsgId);
-					if (PuzzleMove.IsMoveLike(attempt2) && recent2 && CS_cl8_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzdone", 12))
+					if (PuzzleMove.IsMoveLike(attempt2) && recent2 && cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzdone", 12))
 					{
 						string[] sol2 = pap.Puzzle.SolutionSan;
 						bool wasRight = false;
@@ -6292,7 +6307,7 @@ public class Program
 							}
 						}
 						string text5 = (wasRight ? ("✅ Betul juga, @" + senderNum + "! \ud83d\udc4f Tapi puzzle ini sudah keburu diselesaikan tadi. Tunggu puzzle berikutnya ya \ud83d\ude42") : ("Puzzle ini sudah selesai, @" + senderNum + ". \ud83d\ude42 Tunggu puzzle berikutnya ya!"));
-						await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+						await PostJson(cl_472.http, outBase + "/send", new
 						{
 							jid = msg.Jid,
 							text = text5,
@@ -6309,10 +6324,10 @@ public class Program
 			}
 			if (eCommands && isCommand)
 			{
-				string reply3 = await CommandHandler.Handle(cmdText, CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger);
+				string reply3 = await CommandHandler.Handle(cmdText, cl_472.config, cl_472.http, cl_472.app.Logger);
 				if (reply3 != null)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = reply3
@@ -6326,7 +6341,7 @@ public class Program
 					replied = (reply3 != null)
 				});
 			}
-			FaqConfig faq = CS_cl8_472.config.Faq;
+			FaqConfig faq = cl_472.config.Faq;
 			int num18;
 			if (faq != null)
 			{
@@ -6339,10 +6354,10 @@ public class Program
 			}
 			if (num18 != 0)
 			{
-				FaqEntry[] entries = CS_cl8_472.config.Faq.Entries;
+				FaqEntry[] entries = cl_472.config.Faq.Entries;
 				foreach (FaqEntry f in entries)
 				{
-					if (!string.IsNullOrEmpty(f.Pattern) && (!CS_cl8_472.config.Faq.RequireMention || msg.MentionedBot))
+					if (!string.IsNullOrEmpty(f.Pattern) && (!cl_472.config.Faq.RequireMention || msg.MentionedBot))
 					{
 						try
 						{
@@ -6357,7 +6372,7 @@ public class Program
 										id = f.Id
 									});
 								}
-								if (cooldownSec > 0 && !senderExempt && !CS_cl8_472.cmdCooldown.Allow($"{msg.Jid}|{senderNum}|faq:{f.Id}", cooldownSec))
+								if (cooldownSec > 0 && !senderExempt && !cl_472.cmdCooldown.Allow($"{msg.Jid}|{senderNum}|faq:{f.Id}", cooldownSec))
 								{
 									return Results.Json(new
 									{
@@ -6370,13 +6385,13 @@ public class Program
 								if (faqReply.Contains("{schedule}"))
 								{
 									string text6 = faqReply;
-									faqReply = text6.Replace("{schedule}", await CommandHandler.BuildSchedule(CS_cl8_472.config, CS_cl8_472.http, CS_cl8_472.app.Logger));
+									faqReply = text6.Replace("{schedule}", await CommandHandler.BuildSchedule(cl_472.config, cl_472.http, cl_472.app.Logger));
 								}
 								if (faqReply.Contains("{rules}"))
 								{
-									faqReply = faqReply.Replace("{rules}", CS_cl8_472.config.RulesText);
+									faqReply = faqReply.Replace("{rules}", cl_472.config.RulesText);
 								}
-								await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+								await PostJson(cl_472.http, outBase + "/send", new
 								{
 									jid = msg.Jid,
 									text = faqReply
@@ -6409,8 +6424,8 @@ public class Program
 			bool isMedia = !string.IsNullOrEmpty(msg.MediaType);
 			bool hasUnsafeLink = ModUtil.HasUnsafeLink(msg.Text);
 			string probeReason = null;
-			ProbationConfig pc = CS_cl8_472.config.Probation;
-			if (pc != null && pc.Enabled && CS_cl8_472.joins.InProbation(probationKey, pc.Minutes, DateTimeOffset.UtcNow.UtcDateTime))
+			ProbationConfig pc = cl_472.config.Probation;
+			if (pc != null && pc.Enabled && cl_472.joins.InProbation(probationKey, pc.Minutes, DateTimeOffset.UtcNow.UtcDateTime))
 			{
 				if (pc.BlockMedia && isMedia && (!pc.BlockForwardedOnly || msg.IsForwarded))
 				{
@@ -6425,7 +6440,7 @@ public class Program
 			int num20;
 			if (probeReason == null && isMedia)
 			{
-				MediaModerationConfig mm = CS_cl8_472.config.MediaModeration;
+				MediaModerationConfig mm = cl_472.config.MediaModeration;
 				if (mm != null && mm.BlockForwardedMedia && msg.IsForwarded)
 				{
 					num20 = ((msg.ForwardScore >= Math.Max(1, mm.ForwardScoreThreshold)) ? 1 : 0);
@@ -6443,18 +6458,18 @@ public class Program
 			{
 				if (ctx.Caps.CanDelete)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/delete", new
+					await PostJson(cl_472.http, outBase + "/delete", new
 					{
 						jid = msg.Jid,
 						key = msg.Key
 					});
 				}
-				int pcount = CS_cl8_472.warnings.Increment(msg.Jid + "|" + msg.Participant);
+				int pcount = cl_472.warnings.Increment(msg.Jid + "|" + msg.Participant);
 				if (!quietNow)
 				{
-					string tmpl = ((probeReason == null) ? (CS_cl8_472.config.MediaModeration?.Message ?? "@user, media saya rapikan dulu untuk menjaga grup dari spam.") : (CS_cl8_472.config.Probation?.Message ?? "@user, untuk anggota baru, link/media saya tahan sementara agar grup tetap aman."));
+					string tmpl = ((probeReason == null) ? (cl_472.config.MediaModeration?.Message ?? "@user, media saya rapikan dulu untuk menjaga grup dari spam.") : (cl_472.config.Probation?.Message ?? "@user, untuk anggota baru, link/media saya tahan sementara agar grup tetap aman."));
 					string warnText2 = tmpl.Replace("@user", "@" + number).Replace("{count}", pcount.ToString());
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/send", new
+					await PostJson(cl_472.http, outBase + "/send", new
 					{
 						jid = msg.Jid,
 						text = warnText2,
@@ -6462,8 +6477,8 @@ public class Program
 					});
 				}
 				string tag = ((probeReason != null) ? "probation" : "fwd-media");
-				CS_cl8_472.audit.Write(msg.Jid, msg.Participant, msg.PushName, tag, pcount, string.IsNullOrEmpty(msg.Text) ? ("[" + msg.MediaType + "]") : msg.Text);
-				CS_cl8_472.app.Logger.LogInformation("HAPUS ({Tag}) dari {Number}, peringatan ke-{Count}", tag, number, pcount);
+				cl_472.audit.Write(msg.Jid, msg.Participant, msg.PushName, tag, pcount, string.IsNullOrEmpty(msg.Text) ? ("[" + msg.MediaType + "]") : msg.Text);
+				cl_472.app.Logger.LogInformation("HAPUS ({Tag}) dari {Number}, peringatan ke-{Count}", tag, number, pcount);
 				return Results.Json(new
 				{
 					ok = true,
@@ -6475,37 +6490,37 @@ public class Program
 			bool shouldWarnFlood;
 			if (eFlood)
 			{
-				(isFlood, shouldWarnFlood) = CS_cl8_472.floodTracker.Check(msg.Jid + "|" + msg.Participant);
+				(isFlood, shouldWarnFlood) = cl_472.floodTracker.Check(msg.Jid + "|" + msg.Participant);
 			}
 			else
 			{
 				isFlood = false;
 				shouldWarnFlood = false;
 			}
-			matched = (eModeration ? CS_cl8_472.rules.FirstOrDefault((Rule rule) => lf_RuleActive_0_36(rule, g) && !rule.Shadow && rule.Compiled.IsMatch(msg.Text)) : null);
+			matched = (eModeration ? cl_472.rules.FirstOrDefault((Rule rule) => RuleActive(rule, g) && !rule.Shadow && rule.Compiled.IsMatch(msg.Text)) : null);
 			if (matched == null && eModeration)
 			{
-				Rule shadow = CS_cl8_472.rules.FirstOrDefault((Rule rule) => lf_RuleActive_0_36(rule, g) && rule.Shadow && rule.Compiled.IsMatch(msg.Text));
+				Rule shadow = cl_472.rules.FirstOrDefault((Rule rule) => RuleActive(rule, g) && rule.Shadow && rule.Compiled.IsMatch(msg.Text));
 				if (shadow != null)
 				{
-					CS_cl8_472.audit.Write(msg.Jid, msg.Participant, msg.PushName, "SHADOW:" + shadow.Id, 0, msg.Text);
-					CS_cl8_472.app.Logger.LogInformation("SHADOW (tidak dihapus) dari {Number} (aturan {Rule})", number, shadow.Id);
+					cl_472.audit.Write(msg.Jid, msg.Participant, msg.PushName, "SHADOW:" + shadow.Id, 0, msg.Text);
+					cl_472.app.Logger.LogInformation("SHADOW (tidak dihapus) dari {Number} (aturan {Rule})", number, shadow.Id);
 				}
 			}
 			if (matched != null)
 			{
 				if (ctx.Caps.CanDelete)
 				{
-					await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/delete", new
+					await PostJson(cl_472.http, outBase + "/delete", new
 					{
 						jid = msg.Jid,
 						key = msg.Key
 					});
 				}
-				count = CS_cl8_472.warnings.Increment(msg.Jid + "|" + msg.Participant);
+				count = cl_472.warnings.Increment(msg.Jid + "|" + msg.Participant);
 				if (!quietNow)
 				{
-					string[] wv = CS_cl8_472.config.WarningMessageVariants;
+					string[] wv = cl_472.config.WarningMessageVariants;
 					if (wv != null)
 					{
 						int num4 = wv.Length;
@@ -6515,7 +6530,7 @@ public class Program
 							goto IL_a94f;
 						}
 					}
-					obj4 = CS_cl8_472.config.WarningMessage;
+					obj4 = cl_472.config.WarningMessage;
 					goto IL_a94f;
 				}
 				goto IL_aa9d;
@@ -6530,7 +6545,7 @@ public class Program
 			}
 			if (ctx.Caps.CanDelete)
 			{
-				await lf_PostJson_0_40(CS_cl8_472.http, outBase + "/delete", new
+				await PostJson(cl_472.http, outBase + "/delete", new
 				{
 					jid = msg.Jid,
 					key = msg.Key
@@ -6545,8 +6560,8 @@ public class Program
 					warned = false
 				});
 			}
-			fcount = CS_cl8_472.warnings.Increment(msg.Jid + "|" + msg.Participant);
-			string[] fv = CS_cl8_472.config.FloodWarningMessageVariants;
+			fcount = cl_472.warnings.Increment(msg.Jid + "|" + msg.Participant);
+			string[] fv = cl_472.config.FloodWarningMessageVariants;
 			if (fv != null)
 			{
 				int num4 = fv.Length;
@@ -6556,13 +6571,13 @@ public class Program
 					goto IL_ad48;
 				}
 			}
-			obj3 = CS_cl8_472.config.FloodWarningMessage;
+			obj3 = cl_472.config.FloodWarningMessage;
 			goto IL_ad48;
 		});
-		CS_cl8_472.app.MapPost("/member-joined", (Func<MemberJoined, Task<IResult>>)async delegate(MemberJoined ev)
+		cl_472.app.MapPost("/member-joined", (Func<MemberJoined, Task<IResult>>)async delegate(MemberJoined ev)
 		{
-			CS_cl8_472.config.Groups.TryGetValue(ev.Jid, out GroupConfig g);
-			if (!CS_cl8_472.config.ManageAllGroups && g == null)
+			cl_472.config.Groups.TryGetValue(ev.Jid, out GroupConfig g);
+			if (!cl_472.config.ManageAllGroups && g == null)
 			{
 				return Results.Json(new
 				{
@@ -6570,7 +6585,7 @@ public class Program
 					action = "unmanaged"
 				});
 			}
-			ProbationConfig probation = CS_cl8_472.config.Probation;
+			ProbationConfig probation = cl_472.config.Probation;
 			int num;
 			if (probation != null && probation.Enabled)
 			{
@@ -6587,10 +6602,10 @@ public class Program
 				string[] participants2 = ev.Participants;
 				foreach (string pjid in participants2)
 				{
-					CS_cl8_472.joins.Record(NumberUtil.Normalize(pjid), nowJoin);
+					cl_472.joins.Record(NumberUtil.Normalize(pjid), nowJoin);
 				}
 			}
-			if (!(g?.WelcomeEnabled ?? CS_cl8_472.config.WelcomeEnabled))
+			if (!(g?.WelcomeEnabled ?? cl_472.config.WelcomeEnabled))
 			{
 				return Results.Json(new
 				{
@@ -6598,7 +6613,7 @@ public class Program
 					action = "welcome-disabled"
 				});
 			}
-			if (QuietHours.IsActive(g?.QuietHours ?? CS_cl8_472.config.QuietHours, DateTimeOffset.UtcNow))
+			if (QuietHours.IsActive(g?.QuietHours ?? cl_472.config.QuietHours, DateTimeOffset.UtcNow))
 			{
 				return Results.Json(new
 				{
@@ -6614,21 +6629,21 @@ public class Program
 					action = "no-participants"
 				});
 			}
-			string welcomeMsg = g?.WelcomeMessage ?? CS_cl8_472.config.WelcomeMessage;
-			string rulesText = g?.RulesText ?? CS_cl8_472.config.RulesText;
+			string welcomeMsg = g?.WelcomeMessage ?? cl_472.config.WelcomeMessage;
+			string rulesText = g?.RulesText ?? cl_472.config.RulesText;
 			string[] participants3 = ev.Participants;
 			foreach (string p in participants3)
 			{
 				string number = NumberUtil.Normalize(p);
 				string text3 = welcomeMsg.Replace("@user", "@" + number).Replace("{group}", ev.GroupName ?? "").Replace("{rules}", rulesText);
-				await CS_cl8_472.lf_PostImportant_5(ChannelRoute.BaseForJid(CS_cl8_472.config, ev.Jid) + "/send", new
+				await cl_472.PostImportant(ChannelRoute.BaseForJid(cl_472.config, ev.Jid) + "/send", new
 				{
 					jid = ev.Jid,
 					text = text3,
 					mentions = new string[1] { p }
 				});
 			}
-			CS_cl8_472.app.Logger.LogInformation("Sambutan dikirim ke {Count} member baru di {Jid}", ev.Participants.Length, ev.Jid);
+			cl_472.app.Logger.LogInformation("Sambutan dikirim ke {Count} member baru di {Jid}", ev.Participants.Length, ev.Jid);
 			return Results.Json(new
 			{
 				ok = true,
@@ -6636,9 +6651,9 @@ public class Program
 				count = ev.Participants.Length
 			});
 		});
-		CS_cl8_472.app.MapPost("/broadcast", (Func<BroadcastRequest, Task<IResult>>)async delegate(BroadcastRequest req)
+		cl_472.app.MapPost("/broadcast", (Func<BroadcastRequest, Task<IResult>>)async delegate(BroadcastRequest req)
 		{
-			if (string.IsNullOrWhiteSpace(CS_cl8_472.config.BroadcastToken))
+			if (string.IsNullOrWhiteSpace(cl_472.config.BroadcastToken))
 			{
 				return Results.Json(new
 				{
@@ -6646,7 +6661,7 @@ public class Program
 					error = "broadcast nonaktif (set broadcastToken di config)"
 				}, (JsonSerializerOptions?)null, (string?)null, (int?)403);
 			}
-			if (req.Token != CS_cl8_472.config.BroadcastToken)
+			if (req.Token != cl_472.config.BroadcastToken)
 			{
 				return Results.Json(new
 				{
@@ -6684,7 +6699,7 @@ public class Program
 			}
 			if (num != 0)
 			{
-				CS_cl8_472.config.TournamentGroups.TryGetValue(tid.ToString(), out jid);
+				cl_472.config.TournamentGroups.TryGetValue(tid.ToString(), out jid);
 			}
 			if (string.IsNullOrWhiteSpace(jid))
 			{
@@ -6694,13 +6709,13 @@ public class Program
 					error = "sertakan 'jid' grup atau 'tournamentId' yang terdaftar di tournamentGroups"
 				}, (JsonSerializerOptions?)null, (string?)null, (int?)400);
 			}
-			if (!(await CS_cl8_472.lf_PostImportant_5(ChannelRoute.BaseForJid(CS_cl8_472.config, jid) + "/send", new
+			if (!(await cl_472.PostImportant(ChannelRoute.BaseForJid(cl_472.config, jid) + "/send", new
 			{
 				jid = jid,
 				text = req.Text
 			})))
 			{
-				CS_cl8_472.app.Logger.LogWarning("Broadcast GAGAL ke {Jid}", jid);
+				cl_472.app.Logger.LogWarning("Broadcast GAGAL ke {Jid}", jid);
 				return Results.Json(new
 				{
 					ok = false,
@@ -6708,7 +6723,7 @@ public class Program
 					jid = jid
 				}, (JsonSerializerOptions?)null, (string?)null, (int?)502);
 			}
-			CS_cl8_472.app.Logger.LogInformation("Broadcast ke {Jid} ({Len} karakter)", jid, req.Text.Length);
+			cl_472.app.Logger.LogInformation("Broadcast ke {Jid} ({Len} karakter)", jid, req.Text.Length);
 			return Results.Json(new
 			{
 				ok = true,
@@ -6716,18 +6731,18 @@ public class Program
 				jid = jid
 			});
 		});
-		CS_cl8_472.app.Run(CS_cl8_472.config.ListenUrl);
+		cl_472.app.Run(cl_472.config.ListenUrl);
 	}
 
 	[CompilerGenerated]
-	internal static IResult lf_PanelDeny_0_13(HttpContext c)
+	internal static IResult PanelDeny(HttpContext c)
 	{
 		c.Response.Headers["WWW-Authenticate"] = "Basic realm=\"WA Bot Admin\"";
 		return Results.Text("Perlu login admin (password = token admin).", "text/plain", null, 401);
 	}
 
 	[CompilerGenerated]
-	internal static HashSet<string> lf_BuildExempt_0_24(AppConfig cfg)
+	internal static HashSet<string> BuildExempt(AppConfig cfg)
 	{
 		return (from s in cfg.ExemptNumbers.Select(NumberUtil.Normalize)
 			where s.Length > 0
@@ -6735,7 +6750,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static List<PuzzleItem> lf_LoadPuzzlePool_0_25(string path, ILogger logger)
+	internal static List<PuzzleItem> LoadPuzzlePool(string path, ILogger logger)
 	{
 		try
 		{
@@ -6754,7 +6769,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static Dictionary<string, ActivePuzzle> lf_LoadActivePuzzles_0_26(string path)
+	internal static Dictionary<string, ActivePuzzle> LoadActivePuzzles(string path)
 	{
 		try
 		{
@@ -6770,7 +6785,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static HashSet<string> lf_LoadPuzzleDailyState_0_27(string path)
+	internal static HashSet<string> LoadPuzzleDailyState(string path)
 	{
 		try
 		{
@@ -6792,7 +6807,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static void lf_SavePuzzleDailyState_0_28(string path, HashSet<string> sentSlots, string today)
+	internal static void SavePuzzleDailyState(string path, HashSet<string> sentSlots, string today)
 	{
 		try
 		{
@@ -6808,26 +6823,26 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static PuzzleItem lf_PickPuzzleForSlot_0_29(List<PuzzleItem> pool, PuzzleDailySlot slot, HashSet<int> usedIdx, HashSet<string>? excludeIds = null)
+	internal static PuzzleItem PickPuzzleForSlot(List<PuzzleItem> pool, PuzzleDailySlot slot, HashSet<int> usedIdx, HashSet<string>? excludeIds = null)
 	{
-		DC_0_9 CS_cl8_12 = new DC_0_9();
-		CS_cl8_12.excludeIds = excludeIds;
-		CS_cl8_12.usedIdx = usedIdx;
-		CS_cl8_12.min = Math.Max(0, slot.MinRating);
-		CS_cl8_12.max = ((slot.MaxRating > 0) ? slot.MaxRating : 9999);
+		DC_0_9 cl_12 = new DC_0_9();
+		cl_12.excludeIds = excludeIds;
+		cl_12.usedIdx = usedIdx;
+		cl_12.min = Math.Max(0, slot.MinRating);
+		cl_12.max = ((slot.MaxRating > 0) ? slot.MaxRating : 9999);
 		List<(PuzzleItem, int)> list = (from x in pool.Select((PuzzleItem p, int i) => (p: p, i: i))
-			where !CS_cl8_12.usedIdx.Contains(x.i) && CS_cl8_12.lf_NotActive_66(x) && x.p.Rating >= CS_cl8_12.min && x.p.Rating <= CS_cl8_12.max
+			where !cl_12.usedIdx.Contains(x.i) && cl_12.NotActive(x) && x.p.Rating >= cl_12.min && x.p.Rating <= cl_12.max
 			select x).ToList();
 		if (list.Count == 0)
 		{
 			list = (from x in pool.Select((PuzzleItem p, int i) => (p: p, i: i))
-				where !CS_cl8_12.usedIdx.Contains(x.i) && CS_cl8_12.lf_NotActive_66(x)
+				where !cl_12.usedIdx.Contains(x.i) && cl_12.NotActive(x)
 				select x).ToList();
 		}
 		if (list.Count == 0)
 		{
 			list = (from x in pool.Select((PuzzleItem p, int i) => (p: p, i: i))
-				where !CS_cl8_12.usedIdx.Contains(x.i)
+				where !cl_12.usedIdx.Contains(x.i)
 				select x).ToList();
 		}
 		if (list.Count == 0)
@@ -6835,12 +6850,12 @@ public class Program
 			list = pool.Select((PuzzleItem p, int i) => (p: p, i: i)).ToList();
 		}
 		(PuzzleItem, int) tuple = list[Random.Shared.Next(list.Count)];
-		CS_cl8_12.usedIdx.Add(tuple.Item2);
+		cl_12.usedIdx.Add(tuple.Item2);
 		return tuple.Item1;
 	}
 
 	[CompilerGenerated]
-	internal static string lf_FormatPuzzleSolution_0_31(PuzzleItem p)
+	internal static string FormatPuzzleSolution(PuzzleItem p)
 	{
 		string[] solutionSan = p.SolutionSan;
 		if (solutionSan.Length == 0)
@@ -6872,7 +6887,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static bool lf_RuleActive_0_36(Rule r, GroupConfig? g)
+	internal static bool RuleActive(Rule r, GroupConfig? g)
 	{
 		bool result = r.Enabled;
 		if (g?.DisabledRules != null && ((ReadOnlySpan<string>)g.DisabledRules).Contains(r.Id))
@@ -6887,7 +6902,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static async Task<List<GroupOption>> lf_FetchGroups_0_37(string gatewayUrl, HttpClient http)
+	internal static async Task<List<GroupOption>> FetchGroups(string gatewayUrl, HttpClient http)
 	{
 		List<GroupOption> list = new List<GroupOption>();
 		try
@@ -6919,7 +6934,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static string lf_TargetPrompt_0_38(List<GroupOption> opts)
+	internal static string TargetPrompt(List<GroupOption> opts)
 	{
 		if (opts.Count == 0)
 		{
@@ -6941,7 +6956,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static List<GroupOption> lf_ParseSelection_0_39(string text, List<GroupOption> opts)
+	internal static List<GroupOption> ParseSelection(string text, List<GroupOption> opts)
 	{
 		List<GroupOption> list = new List<GroupOption>();
 		string text2 = text.Trim().ToLowerInvariant();
@@ -6961,7 +6976,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static async Task<bool> lf_PostJson_0_40(HttpClient http, string url, object body)
+	internal static async Task<bool> PostJson(HttpClient http, string url, object body)
 	{
 		if (Sleeper.Asleep)
 		{
@@ -6990,7 +7005,7 @@ public class Program
 	}
 
 	[CompilerGenerated]
-	internal static async Task<string?> lf_PostAndGetId_0_41(HttpClient http, string url, object body)
+	internal static async Task<string?> PostAndGetId(HttpClient http, string url, object body)
 	{
 		if (Sleeper.Asleep)
 		{
@@ -9216,7 +9231,7 @@ internal static class CommandHandler
 	{
 		public HttpClient http;
 
-		internal async Task<JsonDocument?> lf_BuildChesscomProfile_Get_0(string url)
+		internal async Task<JsonDocument?> BuildChesscomProfile_Get(string url)
 		{
 			using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Get, url);
 			req.Headers.Add("User-Agent", "WA-Bot Liga Catur Indonesia");
@@ -9486,11 +9501,11 @@ internal static class CommandHandler
 			stringBuilder2.AppendLine(ref handler);
 			if (r.TryGetProperty("perfs", out DCv_4_.perfs))
 			{
-				lf_BuildLichessProfile_Add_4_0("bullet", "Bullet", ref DCv_4_);
-				lf_BuildLichessProfile_Add_4_0("blitz", "Blitz", ref DCv_4_);
-				lf_BuildLichessProfile_Add_4_0("rapid", "Rapid", ref DCv_4_);
-				lf_BuildLichessProfile_Add_4_0("classical", "Classical", ref DCv_4_);
-				lf_BuildLichessProfile_Add_4_0("puzzle", "Puzzle", ref DCv_4_);
+				BuildLichessProfile_Add("bullet", "Bullet", ref DCv_4_);
+				BuildLichessProfile_Add("blitz", "Blitz", ref DCv_4_);
+				BuildLichessProfile_Add("rapid", "Rapid", ref DCv_4_);
+				BuildLichessProfile_Add("classical", "Classical", ref DCv_4_);
+				BuildLichessProfile_Add("puzzle", "Puzzle", ref DCv_4_);
 			}
 			JsonElement u;
 			string url = ((r.TryGetProperty("url", out u) && u.ValueKind == JsonValueKind.String) ? u.GetString() : ("https://lichess.org/@/" + uname));
@@ -9574,7 +9589,7 @@ internal static class CommandHandler
 		username = username.Trim().TrimStart('@').ToLowerInvariant();
 		try
 		{
-			using JsonDocument prof = await DCv_6_.lf_BuildChesscomProfile_Get_0("https://api.chess.com/pub/player/" + Uri.EscapeDataString(username));
+			using JsonDocument prof = await DCv_6_.BuildChesscomProfile_Get("https://api.chess.com/pub/player/" + Uri.EscapeDataString(username));
 			if (prof == null)
 			{
 				return "Pemain Chess.com \"" + username + "\" tidak ditemukan.";
@@ -9596,15 +9611,15 @@ internal static class CommandHandler
 			handler.AppendFormatted(uname);
 			handler.AppendLiteral("* — Chess.com");
 			stringBuilder2.AppendLine(ref handler);
-			using JsonDocument stats = await DCv_6_.lf_BuildChesscomProfile_Get_0("https://api.chess.com/pub/player/" + Uri.EscapeDataString(username) + "/stats");
+			using JsonDocument stats = await DCv_6_.BuildChesscomProfile_Get("https://api.chess.com/pub/player/" + Uri.EscapeDataString(username) + "/stats");
 			if (stats != null)
 			{
 				DC_6_2 DC_6_3 = default(DC_6_2);
 				DC_6_3.s = stats.RootElement;
-				lf_BuildChesscomProfile_Add_6_1("chess_bullet", "Bullet", ref DC_6_2, ref DC_6_3);
-				lf_BuildChesscomProfile_Add_6_1("chess_blitz", "Blitz", ref DC_6_2, ref DC_6_3);
-				lf_BuildChesscomProfile_Add_6_1("chess_rapid", "Rapid", ref DC_6_2, ref DC_6_3);
-				lf_BuildChesscomProfile_Add_6_1("chess_daily", "Daily", ref DC_6_2, ref DC_6_3);
+				BuildChesscomProfile_Add("chess_bullet", "Bullet", ref DC_6_2, ref DC_6_3);
+				BuildChesscomProfile_Add("chess_blitz", "Blitz", ref DC_6_2, ref DC_6_3);
+				BuildChesscomProfile_Add("chess_rapid", "Rapid", ref DC_6_2, ref DC_6_3);
+				BuildChesscomProfile_Add("chess_daily", "Daily", ref DC_6_2, ref DC_6_3);
 				if (DC_6_3.s.TryGetProperty("tactics", out var tac) && tac.TryGetProperty("highest", out var hi) && hi.TryGetProperty("rating", out var tr) && tr.ValueKind == JsonValueKind.Number)
 				{
 					stringBuilder = DC_6_2.sb;
@@ -10304,7 +10319,7 @@ internal static class CommandHandler
 	}
 
 	[CompilerGenerated]
-	private static void lf_BuildLichessProfile_Add_4_0(string key, string label, ref DC_4_0 P_2)
+	private static void BuildLichessProfile_Add(string key, string label, ref DC_4_0 P_2)
 	{
 		if (P_2.perfs.TryGetProperty(key, out var value) && value.TryGetProperty("rating", out var value2) && value2.ValueKind == JsonValueKind.Number)
 		{
@@ -10330,7 +10345,7 @@ internal static class CommandHandler
 	}
 
 	[CompilerGenerated]
-	private static void lf_BuildChesscomProfile_Add_6_1(string key, string label, ref DC_6_1 P_2, ref DC_6_2 P_3)
+	private static void BuildChesscomProfile_Add(string key, string label, ref DC_6_1 P_2, ref DC_6_2 P_3)
 	{
 		if (P_3.s.TryGetProperty(key, out var value) && value.TryGetProperty("last", out var value2) && value2.TryGetProperty("rating", out var value3) && value3.ValueKind == JsonValueKind.Number)
 		{
