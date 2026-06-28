@@ -2309,7 +2309,7 @@ public class Program
 						action = "analisa-noengine"
 					});
 				}
-				if (!cmdCooldown.Allow(cl_278.msg.Jid + "|" + senderNum + "|analisa", 8))
+				if (false) // cooldown internal DIMATIKAN: bentrok kunci dgn cooldown command global -> dulu selalu blok !analisa
 				{
 					return Results.Json(new
 					{
@@ -2373,6 +2373,7 @@ public class Program
 								action = "analisa-nomedia"
 							});
 						}
+						try { File.WriteAllBytes(Path.Combine(puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG: tangkap gambar asli utk tuning
 						string placement = BoardVision.RecognizeFen(imgBytes, pieceAssetsDir);
 						if (placement == null)
 						{
@@ -5858,7 +5859,7 @@ public class Program
 						action = "analisa-noengine"
 					});
 				}
-				if (!cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|analisa", 8))
+				if (false) // cooldown internal DIMATIKAN: bentrok kunci dgn cooldown command global -> dulu selalu blok !analisa
 				{
 					return Results.Json(new
 					{
@@ -5922,6 +5923,7 @@ public class Program
 								action = "analisa-nomedia"
 							});
 						}
+						try { File.WriteAllBytes(Path.Combine(cl_472.puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG: tangkap gambar asli utk tuning
 						string placement = BoardVision.RecognizeFen(imgBytes, cl_472.pieceAssetsDir);
 						if (placement == null)
 						{
