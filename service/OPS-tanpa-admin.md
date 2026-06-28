@@ -1,7 +1,7 @@
 # Operasi Bot Tanpa Admin — Cheat Sheet
 
 Semua perintah di bawah jalan dari terminal mana pun di server **tanpa hak admin**.
-Token restart = `wabot-redeploy-2f9k7x` (hanya berlaku dari localhost).
+Token restart = `<ADMIN_TOKEN>` (hanya berlaku dari localhost).
 
 ## 1) Cek kesehatan
 ```bash
@@ -20,13 +20,13 @@ Berlaku untuk: aturan moderasi, daftar grup, exempt, puzzle, announcer, jam tena
 ## 3) Deploy / restart (TANPA admin) — wrapper loop otomatis rebuild
 ```bash
 # restart brain saja
-curl -s -X POST "http://127.0.0.1:5050/admin/restart?token=wabot-redeploy-2f9k7x&target=brain"
+curl -s -X POST "http://127.0.0.1:5050/admin/restart?token=<ADMIN_TOKEN>&target=brain"
 
 # restart gateway saja
-curl -s -X POST "http://127.0.0.1:5050/admin/restart?token=wabot-redeploy-2f9k7x&target=gateway"
+curl -s -X POST "http://127.0.0.1:5050/admin/restart?token=<ADMIN_TOKEN>&target=gateway"
 
 # restart keduanya
-curl -s -X POST "http://127.0.0.1:5050/admin/restart?token=wabot-redeploy-2f9k7x&target=both"
+curl -s -X POST "http://127.0.0.1:5050/admin/restart?token=<ADMIN_TOKEN>&target=both"
 ```
 Lalu cek lagi `/health` sampai `{"ok":true}` (biasanya ~6 detik untuk brain).
 

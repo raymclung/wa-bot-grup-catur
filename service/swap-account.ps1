@@ -18,7 +18,7 @@ $root  = Split-Path -Parent $PSScriptRoot
 $auth  = Join-Path $root 'gateway\auth'
 $qrPng = Join-Path $root 'gateway\qr.png'
 $qrHtml= Join-Path $root 'gateway\qr.html'
-$token = 'wabot-redeploy-2f9k7x'          # = adminApiToken (endpoint lokal)
+$token = (Get-Content (Join-Path $root 'brain\config\config.json') -Raw | ConvertFrom-Json).adminApiToken  # baca dari config (jangan hardcode secret)
 $gw    = 'http://127.0.0.1:3211'
 
 Write-Host "=== SWAP AKUN WHATSAPP BOT ==="
