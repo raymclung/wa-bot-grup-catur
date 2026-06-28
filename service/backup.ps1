@@ -43,6 +43,18 @@ Get-ChildItem -Path (Join-Path $root 'brain\data') -Filter '*.json' -File |
     Where-Object { $_.Name -ne 'puzzles.json' } |
     ForEach-Object { Copy-Item $_.FullName -Destination $dataDest -Force }
 
+# === SOURCE CODE (ditambah 2026-06-28 setelah insiden hilang-source) ===
+# Agar source brain/gateway/service bisa DIPULIHKAN dari backup, bukan cuma decompile DLL.
+$brainSrcDest = Join-Path $stage 'brain'
+$null = New-Item -ItemType Directory -Force -Path $brainSrcDest
+Get-ChildItem -Path (Join-Path $root 'brain') -Filter '*.cs' -File |
+    ForEach-Object { Copy-Item $_.FullName -Destination $brainSrcDest -Force }
+Copy-Into (Join-Path $root 'brain\WaBot.csproj')   'brain\WaBot.csproj'
+Copy-Into (Join-Path $root 'gateway\src')          'gateway\src'
+Copy-Into (Join-Path $root 'gateway\package.json') 'gateway\package.json'
+Copy-Into (Join-Path $root 'service')              'service'
+Copy-Into (Join-Path $root 'adapters')             'adapters'
+
 # Buat ZIP
 $zip = Join-Path $backups ("wa-bot-" + $stamp + ".zip")
 if (Test-Path $zip) { Remove-Item $zip -Force }
