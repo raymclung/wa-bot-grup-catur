@@ -134,7 +134,7 @@ internal static class PairingCommand
 		string wName = (!string.IsNullOrWhiteSpace(lw.FullName) ? lw.FullName : (lw.Handle.Length > 0 ? lw.Handle : ("@" + wp.Lid)));
 		string bName = (!string.IsNullOrWhiteSpace(lb.FullName) ? lb.FullName : (lb.Handle.Length > 0 ? lb.Handle : ("@" + bp.Lid)));
 		// Plain text (tanpa italic/markdown) supaya gampang di-copy. Nama lengkap dari LCI (full_name).
-		string body = "♟️ Board siap! " + wName + " (putih) vs " + bName + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + pr.Url + "\nBulkID: " + pr.BulkId + "\nMulai jam: @bot start " + pr.BulkId + "  ·  Batal: @bot cancel " + pr.BulkId;
+		string body = "♟️ Board siap! " + wName + " (putih) vs " + bName + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + Invite(pr.Url) + "\nBulkID: " + pr.BulkId + "\nMulai jam: @bot start " + pr.BulkId + "  ·  Batal: @bot cancel " + pr.BulkId;
 		await Send(http, outBase, msg.Jid, body, null, logger);
 		return "pair";
 	}
@@ -190,6 +190,21 @@ internal static class PairingCommand
 			}
 		}
 		return "";
+	}
+
+	// Ajakan klik link, divariasikan acak (3-5 gaya) biar tidak terdengar robotik. {0} = URL game.
+	private static readonly string[] _invites = new string[]
+	{
+		"{0} <- pemain klik di sini\nPenonton juga boleh klik! Ayuk!",
+		"{0} <- klik di sini buat mulai, pemain!\nYang mau nonton, klik juga ya. Seru!",
+		"{0} <- pemain masuk lewat link ini\nPenonton dipersilakan merapat, ramaikan!",
+		"{0} <- ini papannya, pemain langsung gas\nPenonton boleh ikut nonton bareng!",
+		"{0} <- pemain klik di sini\nNonton juga boleh kok, ayo rame-rame!"
+	};
+
+	private static string Invite(string url)
+	{
+		return string.Format(_invites[Random.Shared.Next(_invites.Length)], url);
 	}
 
 	private static string GetLast(string jid)
