@@ -37,9 +37,10 @@ internal static class PairingCommand
 			return null;
 		}
 		string t = (msg.Text ?? "").ToLowerInvariant();
+		string bulkArg = ExtractBulkId(msg.Text ?? "");
 		bool isPair = t.Contains("pair") || t.Contains("pasang");
-		bool isStart = StartRx.IsMatch(t) && (t.Contains("jam") || t.Contains("clock") || t.Contains("start"));
-		bool isCancel = CancelRx.IsMatch(t) && (t.Contains("board") || t.Contains("papan") || t.Contains("game") || t.Contains("pairing") || t.Contains("batal"));
+		bool isStart = StartRx.IsMatch(t) && (bulkArg.Length > 0 || t.Contains("start") || t.Contains("jam") || t.Contains("clock"));
+		bool isCancel = CancelRx.IsMatch(t);
 		if (!isPair && !isStart && !isCancel)
 		{
 			return null;
@@ -52,10 +53,10 @@ internal static class PairingCommand
 
 		if (isCancel)
 		{
-			string bulkC = GetLast(msg.Jid);
+			string bulkC = (bulkArg.Length > 0) ? bulkArg : GetLast(msg.Jid);
 			if (bulkC.Length == 0)
 			{
-				await Send(http, outBase, msg.Jid, "Belum ada board untuk dibatalkan di grup ini.", null, logger);
+				await Send(http, outBase, msg.Jid, "Belum ada board untuk dibatalkan. Sebutkan BulkID: @bot cancel <BulkID>", null, logger);
 				return "pair-cancel-none";
 			}
 			LciClient.ActionResult ar = await LciClient.CancelBoard(config, http, bulkC, logger);
@@ -64,10 +65,10 @@ internal static class PairingCommand
 		}
 		if (isStart)
 		{
-			string bulkS = GetLast(msg.Jid);
+			string bulkS = (bulkArg.Length > 0) ? bulkArg : GetLast(msg.Jid);
 			if (bulkS.Length == 0)
 			{
-				await Send(http, outBase, msg.Jid, "Belum ada board untuk dimulai. Buat dulu: @bot pair @A vs @B G5+1", null, logger);
+				await Send(http, outBase, msg.Jid, "Belum ada board untuk dimulai. Buat dulu: @bot pair @A vs @B G5+1 (atau: @bot start <BulkID>)", null, logger);
 				return "pair-start-none";
 			}
 			LciClient.ActionResult ar2 = await LciClient.StartClocks(config, http, bulkS, logger);
@@ -130,7 +131,7 @@ internal static class PairingCommand
 		SetLast(msg.Jid, pr.BulkId);
 		string ratedTxt = (rated ? "rated" : "unrated");
 		int mins = limit / 60;
-		string body = "♟️ Board siap! @" + wp.Lid + " (putih) vs @" + bp.Lid + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + pr.Url + "\n_Ketik @bot start untuk mulai jam, atau @bot cancel untuk batal._";
+		string body = "♟️ Board siap! @" + wp.Lid + " (putih) vs @" + bp.Lid + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + pr.Url + "\nBulkID: " + pr.BulkId + "\n_Mulai jam: @bot start " + pr.BulkId + "  ·  Batal: @bot cancel " + pr.BulkId + "_";
 		await Send(http, outBase, msg.Jid, body, new string[2] { wp.Lid, bp.Lid }, logger);
 		return "pair";
 	}
@@ -162,6 +163,30 @@ internal static class PairingCommand
 	{
 		s = (s ?? "").Trim();
 		return (s.Length > 100) ? s.Substring(0, 100) : s;
+	}
+
+	// Ambil BulkID dari teks perintah start/cancel: token pertama yang BUKAN mention (@..),
+	// bukan kata kunci, panjang >= 3. "" kalau tak ada (-> pakai board terakhir grup).
+	private static readonly string[] _bulkKw = new string[] { "start", "mulai", "jalankan", "jam", "clock", "clocks", "cancel", "batal", "hapus", "board", "papan", "game", "pairing", "bulk", "id", "bulkid" };
+
+	private static string ExtractBulkId(string text)
+	{
+		foreach (string w in (text ?? "").Split(new char[] { ' ', '\t', '\n', '\r', ',', '.', ':' }, StringSplitOptions.RemoveEmptyEntries))
+		{
+			if (w.StartsWith("@"))
+			{
+				continue;
+			}
+			if (Array.IndexOf(_bulkKw, w.ToLowerInvariant()) >= 0)
+			{
+				continue;
+			}
+			if (w.Length >= 3)
+			{
+				return w;
+			}
+		}
+		return "";
 	}
 
 	private static string GetLast(string jid)
