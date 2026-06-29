@@ -4261,7 +4261,20 @@ public class Program
 				num = 0;
 			}
 			bool dmAllowed = (byte)num != 0;
-			if (!cl_472.config.ManageAllGroups && g == null && msg.Channel == "whatsapp" && !dmAllowed)
+			bool pzlAnswerHere = false;
+				if (g == null && msg.Channel == "whatsapp" && !dmAllowed)
+				{
+					ActivePuzzle apzU;
+					lock (cl_472.puzzleLock)
+					{
+						cl_472.activePuzzles.TryGetValue(msg.Jid, out apzU);
+					}
+					if (apzU != null && !apzU.Revealed && PuzzleMove.IsMoveLike(PuzzleMove.StripMoveNumber(msg.Text.Trim())))
+					{
+						pzlAnswerHere = true;
+					}
+				}
+				if (!cl_472.config.ManageAllGroups && g == null && msg.Channel == "whatsapp" && !dmAllowed && !pzlAnswerHere)
 			{
 				return Results.Json(new
 				{
