@@ -4097,7 +4097,17 @@ public class Program
 				exempt = cl_472.exempt.Count
 			});
 		});
-		cl_472.app.MapPost("/admin/restart", (Func<HttpContext, Task<IResult>>)async delegate(HttpContext ctx)
+		cl_472.app.MapGet("/lci/lookup", (Func<HttpContext, Task<IResult>>)async delegate(HttpContext ctxLci)
+			{
+				if (string.IsNullOrWhiteSpace(cl_472.config.AdminApiToken) || (string?)ctxLci.Request.Query["token"] != cl_472.config.AdminApiToken)
+				{
+					return Results.Json(new { ok = false, error = "token salah" }, (JsonSerializerOptions?)null, (string?)null, (int?)401);
+				}
+				string lciPhone = ctxLci.Request.Query["phone"].ToString();
+				LciClient.LookupResult lr = await LciClient.LookupByPhone(cl_472.config, cl_472.http, lciPhone, cl_472.app.Logger);
+				return Results.Json(new { ok = true, found = lr.Found, verified = lr.Verified, name = lr.FullName, handle = lr.Handle });
+			});
+			cl_472.app.MapPost("/admin/restart", (Func<HttpContext, Task<IResult>>)async delegate(HttpContext ctx)
 		{
 			if (string.IsNullOrWhiteSpace(cl_472.config.AdminApiToken))
 			{
@@ -7637,6 +7647,10 @@ internal class AppConfig
 	public string BroadcastToken { get; set; } = "";
 
 	public string AdminApiToken { get; set; } = "";
+
+	public string WabotToken { get; set; } = "";
+
+	public LciConfig? Lci { get; set; }
 
 	public Dictionary<string, string> TournamentGroups { get; set; } = new Dictionary<string, string>();
 
@@ -11667,7 +11681,15 @@ internal static class ConfigStore
 						cfg.BroadcastToken = text2;
 					}
 				}
-				if (rootElement.TryGetProperty("dbConnectionString", out var value3))
+				if (rootElement.TryGetProperty("wabotToken", out var valueWb))
+					{
+						string textWb = valueWb.GetString();
+						if (textWb != null && textWb.Length > 0)
+						{
+							cfg.WabotToken = textWb;
+						}
+					}
+					if (rootElement.TryGetProperty("dbConnectionString", out var value3))
 				{
 					string text3 = value3.GetString();
 					if (text3 != null && text3.Length > 0)
