@@ -131,8 +131,11 @@ internal static class PairingCommand
 		SetLast(msg.Jid, pr.BulkId);
 		string ratedTxt = (rated ? "rated" : "unrated");
 		int mins = limit / 60;
-		string body = "♟️ Board siap! @" + wp.Lid + " (putih) vs @" + bp.Lid + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + pr.Url + "\nBulkID: " + pr.BulkId + "\n_Mulai jam: @bot start " + pr.BulkId + "  ·  Batal: @bot cancel " + pr.BulkId + "_";
-		await Send(http, outBase, msg.Jid, body, new string[2] { wp.Lid, bp.Lid }, logger);
+		string wName = (!string.IsNullOrWhiteSpace(lw.FullName) ? lw.FullName : (lw.Handle.Length > 0 ? lw.Handle : ("@" + wp.Lid)));
+		string bName = (!string.IsNullOrWhiteSpace(lb.FullName) ? lb.FullName : (lb.Handle.Length > 0 ? lb.Handle : ("@" + bp.Lid)));
+		// Plain text (tanpa italic/markdown) supaya gampang di-copy. Nama lengkap dari LCI (full_name).
+		string body = "♟️ Board siap! " + wName + " (putih) vs " + bName + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + pr.Url + "\nBulkID: " + pr.BulkId + "\nMulai jam: @bot start " + pr.BulkId + "  ·  Batal: @bot cancel " + pr.BulkId;
+		await Send(http, outBase, msg.Jid, body, null, logger);
 		return "pair";
 	}
 
