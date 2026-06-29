@@ -4331,6 +4331,14 @@ public class Program
 				Topic = TopicStore.Get(msg.Jid)
 			};
 			string outBase = ChannelRoute.Base(cl_472.config, ctx.Channel);
+			if (msg.MentionedBot)
+			{
+				string? pairAct = await PairingCommand.TryHandle(cl_472.config, cl_472.http, cl_472.app.Logger, outBase, msg, senderNum, senderPhone);
+				if (pairAct != null)
+				{
+					return Results.Json(new { ok = true, action = pairAct });
+				}
+			}
 			if (isCommand && cmdName == "kirimpuzzle" && isConsole)
 			{
 				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
@@ -7599,7 +7607,8 @@ public class Program
 		}
 	}
 }
-internal record IncomingMessage([property: JsonPropertyName("jid")] string Jid, [property: JsonPropertyName("participant")] string Participant, [property: JsonPropertyName("pushName")] string PushName, [property: JsonPropertyName("text")] string Text, [property: JsonPropertyName("key")] JsonElement Key, [property: JsonPropertyName("mentionedBot")] bool MentionedBot, [property: JsonPropertyName("quotedText")] string QuotedText = "", [property: JsonPropertyName("quotedAuthor")] string QuotedAuthor = "", [property: JsonPropertyName("participantPhone")] string ParticipantPhone = "", [property: JsonPropertyName("mediaType")] string MediaType = "", [property: JsonPropertyName("isForwarded")] bool IsForwarded = false, [property: JsonPropertyName("forwardScore")] int ForwardScore = 0, [property: JsonPropertyName("edited")] bool Edited = false, [property: JsonPropertyName("quotedId")] string QuotedId = "", [property: JsonPropertyName("channel")] string Channel = "whatsapp");
+internal record IncomingMessage([property: JsonPropertyName("jid")] string Jid, [property: JsonPropertyName("participant")] string Participant, [property: JsonPropertyName("pushName")] string PushName, [property: JsonPropertyName("text")] string Text, [property: JsonPropertyName("key")] JsonElement Key, [property: JsonPropertyName("mentionedBot")] bool MentionedBot, [property: JsonPropertyName("quotedText")] string QuotedText = "", [property: JsonPropertyName("quotedAuthor")] string QuotedAuthor = "", [property: JsonPropertyName("participantPhone")] string ParticipantPhone = "", [property: JsonPropertyName("mediaType")] string MediaType = "", [property: JsonPropertyName("isForwarded")] bool IsForwarded = false, [property: JsonPropertyName("forwardScore")] int ForwardScore = 0, [property: JsonPropertyName("edited")] bool Edited = false, [property: JsonPropertyName("quotedId")] string QuotedId = "", [property: JsonPropertyName("channel")] string Channel = "whatsapp", [property: JsonPropertyName("mentions")] MentionPair[]? Mentions = null);
+internal record MentionPair([property: JsonPropertyName("lid")] string Lid = "", [property: JsonPropertyName("phone")] string Phone = "");
 internal record MemberJoined([property: JsonPropertyName("jid")] string Jid, [property: JsonPropertyName("groupName")] string GroupName, [property: JsonPropertyName("participants")] string[] Participants, [property: JsonPropertyName("participantsPhone")] string[]? ParticipantsPhone = null);
 internal record BroadcastRequest([property: JsonPropertyName("token")] string Token, [property: JsonPropertyName("tournamentId")] int? TournamentId, [property: JsonPropertyName("jid")] string? Jid, [property: JsonPropertyName("text")] string Text);
 internal class AppConfig

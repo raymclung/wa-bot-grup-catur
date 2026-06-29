@@ -780,6 +780,9 @@ async function startSocket() {
         edited: !!editInfo,
         key: src.key, // key konten yang dimoderasi (asli atau target edit)
         mentionedBot,
+        mentions: (ctxMentions || [])
+          .filter((j) => !botIds.includes(digits(j)))
+          .map((j) => ({ lid: digits(j), phone: resolvePhone(j) || '' })),
         quotedText,
         quotedAuthor,
         quotedId,
