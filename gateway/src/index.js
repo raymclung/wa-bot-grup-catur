@@ -48,6 +48,11 @@ let brainDown = false;          // status brain saat ini (down/up)
 let brainFails = 0;             // hitung gagal cek berturut-turut
 let ollamaDown = false;         // status Ollama (AI) saat ini
 let ollamaFails = 0;            // hitung gagal cek Ollama berturut-turut
+// Antrean pesan masuk yang GAGAL terkirim ke brain (saat brain mati/restart ~5 dtk).
+// Dikirim ulang otomatis saat brain hidup -> pesan (jawaban puzzle, pertanyaan) tetap dibalas.
+let _incomingRetry = [];
+const INCOMING_RETRY_MAX = 200;
+const INCOMING_RETRY_MAXAGE = 5 * 60 * 1000;   // buang yang lebih tua dari 5 menit (anti balas basi)
 
 /** Util: ambil digit dari sebuah JID/string. */
 const digits = (s) => (s || '').split('@')[0].split(':')[0].replace(/\D/g, '');
@@ -517,7 +522,7 @@ async function maybeRelayMedia(msg, jid, caption) {
 }
 
 /** Kirim payload ke salah satu endpoint brain (C#). Gagal-diam agar loop tetap jalan. */
-async function postBrain(endpointPath, payload) {
+async function postBrain(endpointPath, payload, isReplay = false) {
   try {
     const res = await fetch(`${config.brainUrl}${endpointPath}`, {
       method: 'POST',
@@ -535,9 +540,35 @@ async function postBrain(endpointPath, payload) {
     }
     return body;
   } catch (err) {
+    // Brain tak terjangkau (mati/restart). Simpan pesan MASUK untuk dikirim ulang saat brain hidup,
+    // supaya pesan yang datang pas brain restart tetap dibalas. Hanya error KONEKSI (bukan timeout:
+    // timeout bisa berarti brain sempat memproses -> jangan sampai dobel).
+    // AbortSignal.timeout() melempar 'TimeoutError' (Node), manual abort 'AbortError'. Keduanya =
+    // mungkin brain SEMPAT memproses -> JANGAN antre ulang (cegah balasan/aksi DOBEL).
+    const isTimeout = err && (err.name === 'TimeoutError' || err.name === 'AbortError');
+    if (endpointPath === '/incoming' && !isReplay && !isTimeout && _incomingRetry.length < INCOMING_RETRY_MAX) {
+      _incomingRetry.push({ payload, at: Date.now() });
+    }
     logger.error({ err: err.message, endpointPath }, 'Gagal menghubungi brain (C#) \u2014 apakah brain sudah jalan?');
   }
 }
+
+// Kirim ulang pesan tertunda saat brain hidup lagi (dipanggil berkala). Buang yang terlalu basi.
+async function flushIncomingRetry() {
+  if (_incomingRetry.length === 0) return;
+  let up = false;
+  try { const r = await fetch(`${config.brainUrl}/health`, { signal: AbortSignal.timeout(5000) }); up = r.ok; } catch {}
+  if (!up) return;                                  // brain belum hidup -> tunggu putaran berikutnya
+  const items = _incomingRetry; _incomingRetry = [];
+  let n = 0;
+  for (const it of items) {
+    if (Date.now() - it.at > INCOMING_RETRY_MAXAGE) continue; // basi -> buang (cek per-item, bukan snapshot)
+    try { await postBrain('/incoming', it.payload, true); n++; } catch {}
+    await new Promise((r) => setTimeout(r, 300));            // pelan, anti-burst
+  }
+  if (n) logger.info({ replayed: n }, 'pesan tertunda (saat brain mati) dikirim ulang ke brain');
+}
+setInterval(() => { flushIncomingRetry().catch(() => {}); }, 4000);
 
 async function startSocket() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);

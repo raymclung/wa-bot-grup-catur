@@ -33,6 +33,11 @@ static class StockfishEngine
             p.StandardInput.WriteLine("go movetime " + _moveTimeMs);
             p.StandardInput.Flush();
 
+            // Watchdog: kalau engine macet (tak pernah kirim bestmove / pipe menggantung), paksa kill
+            // setelah movetime+6 dtk -> ReadLine() balik null & loop berhenti (tak menggantung thread).
+            var pw = p;
+            _ = Task.Run(async () => { try { await Task.Delay(_moveTimeMs + 6000); if (!pw.HasExited) pw.Kill(true); } catch { } });
+
             string? best = null; string st = "cp"; int sv = 0;
             var sw = Stopwatch.StartNew();
             while (sw.ElapsedMilliseconds < _moveTimeMs + 5000)

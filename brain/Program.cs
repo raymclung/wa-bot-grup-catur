@@ -3174,10 +3174,12 @@ public class Program
 					error = "sertakan 'jid' grup atau 'tournamentId' yang terdaftar di tournamentGroups"
 				}, (JsonSerializerOptions?)null, (string?)null, (int?)400);
 			}
+			string outText = await EnrichBroadcastText(req.Text, http, app.Logger, config);
 			if (!(await PostImportant(ChannelRoute.BaseForJid(config, jid) + "/send", new
 			{
 				jid = jid,
-				text = req.Text
+				text = outText,
+				mentions = ExtractWhatsAppMentions(outText)
 			})))
 			{
 				app.Logger.LogWarning("Broadcast GAGAL ke {Jid}", jid);
@@ -3188,7 +3190,7 @@ public class Program
 					jid = jid
 				}, (JsonSerializerOptions?)null, (string?)null, (int?)502);
 			}
-			app.Logger.LogInformation("Broadcast ke {Jid} ({Len} karakter)", jid, req.Text.Length);
+			app.Logger.LogInformation("Broadcast ke {Jid} ({Len} karakter)", jid, outText.Length);
 			return Results.Json(new
 			{
 				ok = true,
@@ -3776,6 +3778,7 @@ public class Program
 		cl_472.pieceAssetsDir = Path.Combine(contentRootPath, "assets", "pieces");
 		cl_472.activePuzzlePath = Path.Combine(text2, "active-puzzles.json");
 		cl_472.puzzlePool = LoadPuzzlePool(Path.Combine(text2, "puzzles.json"), cl_472.app.Logger);
+			AliasStore.Init(Path.Combine(text2, "aliases.json"));
 		cl_472.activePuzzles = LoadActivePuzzles(cl_472.activePuzzlePath);
 		cl_472.puzzleByMsg = new Dictionary<string, ActivePuzzle>();
 		foreach (ActivePuzzle value in cl_472.activePuzzles.Values)
@@ -4304,6 +4307,115 @@ public class Program
 				Topic = TopicStore.Get(msg.Jid)
 			};
 			string outBase = ChannelRoute.Base(cl_472.config, ctx.Channel);
+			if (isCommand && cmdName == "kirimpuzzle" && isConsole)
+			{
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Perintah ini khusus admin." });
+					return Results.Json(new { ok = true, action = "kirimpuzzle-denied" });
+				}
+				string kpArgs = cmdText.Substring(cl_472.config.CommandPrefix.Length).Trim();
+				if (kpArgs.Length >= "kirimpuzzle".Length) kpArgs = kpArgs.Substring("kirimpuzzle".Length).Trim();
+				string kpLevel = "";
+				foreach (string kpLv in new[] { "mudah", "sedang", "sulit" })
+				{
+					if (kpArgs.EndsWith(kpLv, StringComparison.OrdinalIgnoreCase))
+					{
+						kpLevel = kpLv;
+						kpArgs = kpArgs.Substring(0, kpArgs.Length - kpLv.Length).Trim();
+						break;
+					}
+				}
+				string kpName = kpArgs.Trim();
+				if (kpName.Length == 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Format: !kirimpuzzle <nama grup> [mudah|sedang|sulit]" });
+					return Results.Json(new { ok = true, action = "kirimpuzzle-usage" });
+				}
+				string? kpAlias = AliasStore.Get(kpName);
+				if (!string.IsNullOrEmpty(kpAlias)) kpName = kpAlias;
+				List<GroupOption> kpGroups = await FetchGroups(cl_472.config.GatewayUrl, cl_472.http);
+				List<GroupOption> kpMatch = kpGroups.Where((GroupOption go) => go.Jid.Length > 0 && go.Subject.IndexOf(kpName, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+				if (kpMatch.Count == 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Grup \"" + kpName + "\" tidak ketemu. Cek nama persisnya." });
+					return Results.Json(new { ok = true, action = "kirimpuzzle-notfound" });
+				}
+				if (kpMatch.Count > 1)
+				{
+					string kpListed = string.Join(", ", kpMatch.Select((GroupOption m) => "\"" + m.Subject + "\""));
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Lebih dari satu grup cocok: " + kpListed + ". Perjelas namanya." });
+					return Results.Json(new { ok = true, action = "kirimpuzzle-ambiguous" });
+				}
+				GroupOption kpTarget = kpMatch[0];
+				await cl_472.PostPuzzleAsync(kpTarget.Jid, false, null, PuzzleMove.DifficultySlot("puzzle " + kpLevel, cl_472.config.Puzzle.RevealMinutes));
+				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "✅ Puzzle terkirim ke \"" + kpTarget.Subject + "\"" + ((kpLevel.Length > 0) ? (" (" + kpLevel + ")") : "") + "." });
+				return Results.Json(new { ok = true, action = "kirimpuzzle", target = kpTarget.Jid });
+			}
+			if (isCommand && cmdName == "alias" && isConsole)
+			{
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Perintah ini khusus admin." });
+					return Results.Json(new { ok = true, action = "alias-denied" });
+				}
+				string alArgs = cmdText.Substring(cl_472.config.CommandPrefix.Length).Trim();
+				if (alArgs.Length >= "alias".Length) alArgs = alArgs.Substring("alias".Length).Trim();
+				if (alArgs.Length == 0)
+				{
+					List<KeyValuePair<string, string>> alAll = AliasStore.All();
+					string alList = (alAll.Count == 0) ? "Belum ada alias. Set dengan: !alias <singkatan> = <nama grup>" : ("Alias tersimpan:\n" + string.Join("\n", alAll.Select((KeyValuePair<string, string> kv) => "- " + kv.Key + " -> " + kv.Value)));
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = alList });
+					return Results.Json(new { ok = true, action = "alias-list" });
+				}
+				int alEq = alArgs.IndexOf('=');
+				if (alEq < 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Format: !alias <singkatan> = <nama grup>" });
+					return Results.Json(new { ok = true, action = "alias-usage" });
+				}
+				string alKey = alArgs.Substring(0, alEq).Trim();
+				string alVal = alArgs.Substring(alEq + 1).Trim();
+				if (alKey.Length == 0 || alVal.Length == 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Format: !alias <singkatan> = <nama grup>" });
+					return Results.Json(new { ok = true, action = "alias-usage" });
+				}
+				List<GroupOption> alGroups = await FetchGroups(cl_472.config.GatewayUrl, cl_472.http);
+				List<GroupOption> alMatch = alGroups.Where((GroupOption go) => go.Jid.Length > 0 && go.Subject.IndexOf(alVal, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+				if (alMatch.Count == 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Grup \"" + alVal + "\" tidak ketemu. Alias tidak disimpan." });
+					return Results.Json(new { ok = true, action = "alias-notfound" });
+				}
+				if (alMatch.Count > 1)
+				{
+					string alListed = string.Join(", ", alMatch.Select((GroupOption m) => "\"" + m.Subject + "\""));
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Lebih dari satu grup cocok: " + alListed + ". Perjelas namanya." });
+					return Results.Json(new { ok = true, action = "alias-ambiguous" });
+				}
+				AliasStore.Set(alKey, alMatch[0].Subject);
+				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "✅ Oke, \"" + alKey + "\" = \"" + alMatch[0].Subject + "\". Aku ingat." });
+				return Results.Json(new { ok = true, action = "alias-set" });
+			}
+			if (isCommand && cmdName == "unalias" && isConsole)
+			{
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Perintah ini khusus admin." });
+					return Results.Json(new { ok = true, action = "unalias-denied" });
+				}
+				string ualArgs = cmdText.Substring(cl_472.config.CommandPrefix.Length).Trim();
+				if (ualArgs.Length >= "unalias".Length) ualArgs = ualArgs.Substring("unalias".Length).Trim();
+				if (ualArgs.Length == 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Format: !unalias <singkatan>" });
+					return Results.Json(new { ok = true, action = "unalias-usage" });
+				}
+				bool ualRemoved = AliasStore.Remove(ualArgs);
+				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = ualRemoved ? ("Oke, alias \"" + ualArgs + "\" sudah dihapus.") : ("Alias \"" + ualArgs + "\" tidak ada.") });
+				return Results.Json(new { ok = true, action = "unalias" });
+			}
 			if (isCommand && (cmdName == "sleep" || cmdName == "wake"))
 			{
 				if (cmdName == "wake")
@@ -6721,10 +6833,12 @@ public class Program
 					error = "sertakan 'jid' grup atau 'tournamentId' yang terdaftar di tournamentGroups"
 				}, (JsonSerializerOptions?)null, (string?)null, (int?)400);
 			}
+			string outText = await EnrichBroadcastText(req.Text, cl_472.http, cl_472.app.Logger, cl_472.config);
 			if (!(await cl_472.PostImportant(ChannelRoute.BaseForJid(cl_472.config, jid) + "/send", new
 			{
 				jid = jid,
-				text = req.Text
+				text = outText,
+				mentions = ExtractWhatsAppMentions(outText)
 			})))
 			{
 				cl_472.app.Logger.LogWarning("Broadcast GAGAL ke {Jid}", jid);
@@ -6735,7 +6849,7 @@ public class Program
 					jid = jid
 				}, (JsonSerializerOptions?)null, (string?)null, (int?)502);
 			}
-			cl_472.app.Logger.LogInformation("Broadcast ke {Jid} ({Len} karakter)", jid, req.Text.Length);
+			cl_472.app.Logger.LogInformation("Broadcast ke {Jid} ({Len} karakter)", jid, outText.Length);
 			return Results.Json(new
 			{
 				ok = true,
@@ -6747,6 +6861,219 @@ public class Program
 	}
 
 	[CompilerGenerated]
+	private static async Task<string> EnrichBroadcastText(string text, HttpClient http, ILogger logger, AppConfig config)
+	{
+		try
+		{
+			if (string.IsNullOrWhiteSpace(text) || text.IndexOf("Pairing Manual", StringComparison.OrdinalIgnoreCase) < 0)
+			{
+				return text;
+			}
+			Match link = Regex.Match(text, @"https?://lichess\.org/([A-Za-z0-9]{8,12})(?![A-Za-z0-9/])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+			if (!link.Success)
+			{
+				return text;
+			}
+			string gameId = link.Groups[1].Value;
+			string gameUrl = link.Value;
+			Match pair = Regex.Match(text, @"(?im)^\s*([^\s()]+)\s*\(Putih\)\s+vs\s+([^\s()]+)\s*\(Hitam\)", RegexOptions.CultureInvariant);
+			string whiteUser = pair.Success ? pair.Groups[1].Value.Trim() : "";
+			string blackUser = pair.Success ? pair.Groups[2].Value.Trim() : "";
+			Match tc = Regex.Match(text, @"(?im)^\s*(G?\d+\+\d+)\s*-\s*(rated|casual)\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+			string timeLine = tc.Success ? (tc.Groups[1].Value.ToUpperInvariant() + " - " + tc.Groups[2].Value.ToLowerInvariant()) : "";
+			using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Get, "https://lichess.org/game/export/" + Uri.EscapeDataString(gameId) + "?players=true&moves=false&clocks=false&evals=false&opening=false");
+			req.Headers.Add("User-Agent", "WA-Bot");
+			req.Headers.Accept.ParseAdd("application/json");
+			using HttpResponseMessage resp = await http.SendAsync(req);
+			if (resp.IsSuccessStatusCode)
+			{
+				using JsonDocument doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+				JsonElement root = doc.RootElement;
+				if (root.TryGetProperty("players", out var players))
+				{
+					whiteUser = LichessGameUser(players, "white", whiteUser);
+					blackUser = LichessGameUser(players, "black", blackUser);
+				}
+				if (timeLine.Length == 0)
+				{
+					string rated = (root.TryGetProperty("rated", out var ratedEl) && ratedEl.ValueKind == JsonValueKind.True) ? "rated" : "casual";
+					if (root.TryGetProperty("clock", out var clock) && clock.TryGetProperty("initial", out var ini) && ini.ValueKind == JsonValueKind.Number && clock.TryGetProperty("increment", out var inc) && inc.ValueKind == JsonValueKind.Number)
+					{
+						timeLine = "G" + Math.Max(1, ini.GetInt32() / 60).ToString(CultureInfo.InvariantCulture) + "+" + inc.GetInt32().ToString(CultureInfo.InvariantCulture) + " - " + rated;
+					}
+				}
+			}
+			if (whiteUser.Length == 0 || blackUser.Length == 0)
+			{
+				return text;
+			}
+			string whiteName = await LichessDisplayName(whiteUser, http, logger);
+			string blackName = await LichessDisplayName(blackUser, http, logger);
+			string[] mentionJids = PairingMentionJids(config, whiteUser, blackUser);
+			string tagLine = PairingTagLine(mentionJids);
+			string header = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).FirstOrDefault(x => x.Length > 0) ?? "Pairing Manual - Liga Catur";
+			StringBuilder sb = new StringBuilder();
+			sb.Append("\ud83d\udcaa *").Append(header).AppendLine("*");
+			sb.AppendLine("Duel siap dimulai. Main rapi, gas sampai akhir!");
+			if (tagLine.Length > 0)
+			{
+							sb.AppendLine("Tag pemain: " + tagLine);
+			}
+			sb.AppendLine();
+			sb.AppendLine("Putih: " + FormatPairingPlayer(whiteName, whiteUser));
+			sb.AppendLine("Hitam: " + FormatPairingPlayer(blackName, blackUser));
+			if (timeLine.Length > 0)
+			{
+				sb.AppendLine();
+				sb.AppendLine(timeLine);
+			}
+			sb.AppendLine();
+			sb.Append(gameUrl);
+			return sb.ToString();
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning("Enrich pairing manual gagal: {Msg}", ex.Message);
+			return text;
+		}
+	}
+
+	private static string LichessGameUser(JsonElement players, string color, string fallback)
+	{
+		if (players.TryGetProperty(color, out var side) && side.TryGetProperty("user", out var user))
+		{
+			if (user.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String)
+			{
+				return name.GetString() ?? fallback;
+			}
+			if (user.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+			{
+				return id.GetString() ?? fallback;
+			}
+		}
+		return fallback;
+	}
+
+	private static async Task<string> LichessDisplayName(string username, HttpClient http, ILogger logger)
+	{
+		try
+		{
+			using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Get, "https://lichess.org/api/user/" + Uri.EscapeDataString(username));
+			req.Headers.Add("User-Agent", "WA-Bot");
+			using HttpResponseMessage resp = await http.SendAsync(req);
+			if (!resp.IsSuccessStatusCode)
+			{
+				return username;
+			}
+			using JsonDocument doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+			JsonElement root = doc.RootElement;
+			string uname = root.TryGetProperty("username", out var un) && un.ValueKind == JsonValueKind.String ? (un.GetString() ?? username) : username;
+			string title = root.TryGetProperty("title", out var ti) && ti.ValueKind == JsonValueKind.String ? ((ti.GetString() ?? "") + " ") : "";
+			if (root.TryGetProperty("profile", out var profile))
+			{
+				string real = GetStringProp(profile, "realName");
+				if (real.Length == 0)
+				{
+					string first = GetStringProp(profile, "firstName");
+					string last = GetStringProp(profile, "lastName");
+					real = (first + " " + last).Trim();
+				}
+				if (real.Length > 0)
+				{
+					return (title + real).Trim();
+				}
+			}
+			return (title + uname).Trim();
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning("Lichess display name gagal untuk {User}: {Msg}", username, ex.Message);
+			return username;
+		}
+	}
+
+	private static string GetStringProp(JsonElement obj, string name)
+	{
+		return obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? (v.GetString() ?? "").Trim() : "";
+	}
+
+	private static string[] PairingMentionJids(AppConfig config, params string[] lichessUsers)
+	{
+		Dictionary<string, string> map = config.PlayerMentions ?? new Dictionary<string, string>();
+		if (map.Count == 0)
+		{
+			return Array.Empty<string>();
+		}
+		List<string> result = new List<string>();
+		foreach (string user in lichessUsers ?? Array.Empty<string>())
+		{
+			if (string.IsNullOrWhiteSpace(user))
+			{
+				continue;
+			}
+			string? raw = null;
+			if (!map.TryGetValue(user.Trim(), out raw))
+			{
+				raw = map.FirstOrDefault(kv => kv.Key.Equals(user.Trim(), StringComparison.OrdinalIgnoreCase)).Value;
+			}
+			string jid = NormalizeMentionJid(raw ?? "");
+			if (jid.Length > 0 && !result.Contains(jid, StringComparer.OrdinalIgnoreCase))
+			{
+				result.Add(jid);
+			}
+		}
+		return result.Take(5).ToArray();
+	}
+
+	private static string NormalizeMentionJid(string raw)
+	{
+		string value = (raw ?? "").Trim();
+		if (value.Length == 0)
+		{
+			return "";
+		}
+		if (value.Contains('@'))
+		{
+			return value;
+		}
+		string digits = Regex.Replace(value, @"\D", "");
+		return digits.Length >= 6 ? (digits + "@s.whatsapp.net") : "";
+	}
+
+	private static string PairingTagLine(string[] mentionJids)
+	{
+		return string.Join(" ", (mentionJids ?? Array.Empty<string>()).Select(j => "@" + Regex.Replace(j.Split('@')[0], @"\D", "")).Where(x => x.Length > 1));
+	}
+
+	private static string[] ExtractWhatsAppMentions(string text)
+	{
+		List<string> result = new List<string>();
+		foreach (Match m in Regex.Matches(text ?? "", @"@(\d{6,16})", RegexOptions.CultureInvariant))
+		{
+			string jid = m.Groups[1].Value + "@s.whatsapp.net";
+			if (!result.Contains(jid, StringComparer.OrdinalIgnoreCase))
+			{
+				result.Add(jid);
+			}
+			if (result.Count >= 5)
+			{
+				break;
+			}
+		}
+		return result.ToArray();
+	}
+	private static string FormatPairingPlayer(string displayName, string username)
+	{
+		if (string.IsNullOrWhiteSpace(displayName))
+		{
+			return username;
+		}
+		if (displayName.Equals(username, StringComparison.OrdinalIgnoreCase))
+		{
+			return displayName;
+		}
+		return "*" + displayName + "* (@" + username + ")";
+	}
 	internal static IResult PanelDeny(HttpContext c)
 	{
 		c.Response.Headers["WWW-Authenticate"] = "Basic realm=\"WA Bot Admin\"";
@@ -7093,6 +7420,8 @@ internal class AppConfig
 	public string AdminApiToken { get; set; } = "";
 
 	public Dictionary<string, string> TournamentGroups { get; set; } = new Dictionary<string, string>();
+
+	public Dictionary<string, string> PlayerMentions { get; set; } = new Dictionary<string, string>();
 
 	public bool ModerationEnabled { get; set; } = true;
 
@@ -8787,6 +9116,82 @@ internal class FloodTracker
 				}
 			}
 			return (flood: flag, warn: item);
+		}
+	}
+}
+internal static class AliasStore
+{
+	private static string _path = "";
+
+	private static Dictionary<string, string> _map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+	private static readonly object _lock = new object();
+
+	public static void Init(string path)
+	{
+		_path = path;
+		try
+		{
+			if (File.Exists(path))
+			{
+				Dictionary<string, string>? d = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path));
+				if (d != null)
+				{
+					_map = new Dictionary<string, string>(d, StringComparer.OrdinalIgnoreCase);
+				}
+			}
+		}
+		catch
+		{
+		}
+	}
+
+	public static string? Get(string alias)
+	{
+		lock (_lock)
+		{
+			return _map.TryGetValue((alias ?? "").Trim(), out string? v) ? v : null;
+		}
+	}
+
+	public static void Set(string alias, string name)
+	{
+		lock (_lock)
+		{
+			_map[(alias ?? "").Trim()] = name;
+			Save();
+		}
+	}
+
+	public static bool Remove(string alias)
+	{
+		lock (_lock)
+		{
+			bool r = _map.Remove((alias ?? "").Trim());
+			if (r)
+			{
+				Save();
+			}
+			return r;
+		}
+	}
+
+	public static List<KeyValuePair<string, string>> All()
+	{
+		lock (_lock)
+		{
+			return _map.OrderBy((KeyValuePair<string, string> kv) => kv.Key).ToList();
+		}
+	}
+
+	private static void Save()
+	{
+		try
+		{
+			File.WriteAllText(_path, JsonSerializer.Serialize(_map, new JsonSerializerOptions { WriteIndented = true }));
+		}
+		catch
+		{
 		}
 	}
 }

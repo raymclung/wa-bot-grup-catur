@@ -42,7 +42,9 @@ static class BoardVision
                 }
                 bl.Add(bmp.Bytes); cl.Add(ch);
             }
-            _pieceBytes = bl.ToArray(); _pieceChars = cl.ToArray();
+            // Hanya cache kalau aset benar-benar termuat; jangan kunci array KOSONG permanen
+            // (mis. path aset salah saat panggil pertama) -> biar panggilan berikutnya coba lagi.
+            if (bl.Count > 0) { _pieceBytes = bl.ToArray(); _pieceChars = cl.ToArray(); }
         }
     }
 
