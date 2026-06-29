@@ -2512,7 +2512,7 @@ public class Program
 				if (pap != null && !pap.Revealed && pap.Puzzle.SolutionSan.Length != 0)
 				{
 					string[] sol = pap.Puzzle.SolutionSan;
-					string attempt = cmdText.TrimStart('!', ' ').Trim();
+					string attempt = PuzzleMove.StripMoveNumber(cmdText.TrimStart('!', ' ').Trim());
 					if (PuzzleMove.IsMoveLike(attempt))
 					{
 						int idx;
@@ -2749,7 +2749,7 @@ public class Program
 				}
 				else if (pap != null && pap.Revealed && pap.Puzzle.SolutionSan.Length != 0)
 				{
-					string attempt2 = cmdText.TrimStart('!', ' ').Trim();
+					string attempt2 = PuzzleMove.StripMoveNumber(cmdText.TrimStart('!', ' ').Trim());
 					bool recent2 = (DateTime.UtcNow - pap.SolvedAt).TotalMinutes <= 3.0 || (cl_278.msg.QuotedId.Length > 0 && cl_278.msg.QuotedId == pap.MsgId);
 					if (PuzzleMove.IsMoveLike(attempt2) && recent2 && cmdCooldown.Allow(cl_278.msg.Jid + "|" + senderNum + "|pzdone", 12))
 					{
@@ -6347,7 +6347,7 @@ public class Program
 				if (pap != null && !pap.Revealed && pap.Puzzle.SolutionSan.Length != 0)
 				{
 					string[] sol = pap.Puzzle.SolutionSan;
-					string attempt = cmdText.TrimStart('!', ' ').Trim();
+					string attempt = PuzzleMove.StripMoveNumber(cmdText.TrimStart('!', ' ').Trim());
 					if (PuzzleMove.IsMoveLike(attempt))
 					{
 						int idx;
@@ -6584,7 +6584,7 @@ public class Program
 				}
 				else if (pap != null && pap.Revealed && pap.Puzzle.SolutionSan.Length != 0)
 				{
-					string attempt2 = cmdText.TrimStart('!', ' ').Trim();
+					string attempt2 = PuzzleMove.StripMoveNumber(cmdText.TrimStart('!', ' ').Trim());
 					bool recent2 = (DateTime.UtcNow - pap.SolvedAt).TotalMinutes <= 3.0 || (msg.QuotedId.Length > 0 && msg.QuotedId == pap.MsgId);
 					if (PuzzleMove.IsMoveLike(attempt2) && recent2 && cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzdone", 12))
 					{
@@ -8463,6 +8463,15 @@ internal static class PuzzleMove
 	private static readonly Regex MoveNumRx = new Regex("\\b\\d+\\.(\\.\\.)?", RegexOptions.CultureInvariant);
 
 	private static readonly Regex SanRx = new Regex("(O-O-O|O-O|0-0-0|0-0|[KQRBNGM][a-h]?[1-8]?x?[a-h][1-8](=[QRBNMG])?[+#]?|[a-h]x[a-h][1-8](=[QRBNMG])?[+#]?|\\b[a-h][1-8](=[QRBNMG])?[+#]?)", RegexOptions.CultureInvariant);
+
+	private static readonly Regex LeadMoveNumRx = new Regex("^\\s*\\d{1,3}\\.(\\.\\.)?\\s*[?!]*\\s*", RegexOptions.CultureInvariant);
+
+	// Buang awalan nomor langkah + tanda anotasi: "1.", "1...", "1...?", "12. " -> sisakan langkahnya saja.
+	// Sengaja hanya strip AWALAN (kalimat chat tak diawali nomor langkah, jadi tetap dianggap chat).
+	public static string StripMoveNumber(string s)
+	{
+		return LeadMoveNumRx.Replace((s ?? "").Trim(), "").Trim();
+	}
 
 	public static bool IsMoveLike(string s)
 	{
