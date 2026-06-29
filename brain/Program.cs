@@ -3779,6 +3779,7 @@ public class Program
 		cl_472.activePuzzlePath = Path.Combine(text2, "active-puzzles.json");
 		cl_472.puzzlePool = LoadPuzzlePool(Path.Combine(text2, "puzzles.json"), cl_472.app.Logger);
 			AliasStore.Init(Path.Combine(text2, "aliases.json"));
+			TagAliasStore.Init(Path.Combine(text2, "tag-aliases.json"));
 		cl_472.activePuzzles = LoadActivePuzzles(cl_472.activePuzzlePath);
 		cl_472.puzzleByMsg = new Dictionary<string, ActivePuzzle>();
 		foreach (ActivePuzzle value in cl_472.activePuzzles.Values)
@@ -4351,6 +4352,173 @@ public class Program
 				await cl_472.PostPuzzleAsync(kpTarget.Jid, false, null, PuzzleMove.DifficultySlot("puzzle " + kpLevel, cl_472.config.Puzzle.RevealMinutes));
 				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "✅ Puzzle terkirim ke \"" + kpTarget.Subject + "\"" + ((kpLevel.Length > 0) ? (" (" + kpLevel + ")") : "") + "." });
 				return Results.Json(new { ok = true, action = "kirimpuzzle", target = kpTarget.Jid });
+			}
+			if (isCommand && cmdName == "kirim" && isConsole)
+			{
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Perintah ini khusus admin." });
+					return Results.Json(new { ok = true, action = "kirim-denied" });
+				}
+				string kmArgs = cmdText.Substring(cl_472.config.CommandPrefix.Length).Trim();
+				if (kmArgs.Length >= "kirim".Length) kmArgs = kmArgs.Substring("kirim".Length).Trim();
+				string kmGroup = "";
+				string kmMsg = "";
+				if (kmArgs.StartsWith("\""))
+				{
+					int kmClose = kmArgs.IndexOf('"', 1);
+					if (kmClose > 0)
+					{
+						kmGroup = kmArgs.Substring(1, kmClose - 1).Trim();
+						kmMsg = kmArgs.Substring(kmClose + 1).Trim();
+					}
+				}
+				else
+				{
+					string kmBestAlias = "";
+					foreach (KeyValuePair<string, string> kv in AliasStore.All())
+					{
+						if (kv.Key.Length > kmBestAlias.Length && kmArgs.Length >= kv.Key.Length && kmArgs.Substring(0, kv.Key.Length).Equals(kv.Key, StringComparison.OrdinalIgnoreCase) && (kmArgs.Length == kv.Key.Length || kmArgs[kv.Key.Length] == ' '))
+						{
+							kmBestAlias = kv.Key;
+						}
+					}
+					if (kmBestAlias.Length > 0)
+					{
+						kmGroup = kmBestAlias;
+						kmMsg = kmArgs.Substring(kmBestAlias.Length).Trim();
+					}
+					else
+					{
+						int kmSp = kmArgs.IndexOf(' ');
+						if (kmSp > 0)
+						{
+							kmGroup = kmArgs.Substring(0, kmSp).Trim();
+							kmMsg = kmArgs.Substring(kmSp + 1).Trim();
+						}
+					}
+				}
+				if (kmMsg.Length >= 2 && kmMsg.StartsWith("\"") && kmMsg.EndsWith("\""))
+				{
+					kmMsg = kmMsg.Substring(1, kmMsg.Length - 2);
+				}
+				if (kmGroup.Length == 0 || kmMsg.Length == 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Format: !kirim \"nama grup\" \"pesan\"  (atau: !kirim <alias> pesan)" });
+					return Results.Json(new { ok = true, action = "kirim-usage" });
+				}
+				string? kmAlias = AliasStore.Get(kmGroup);
+				if (!string.IsNullOrEmpty(kmAlias)) kmGroup = kmAlias;
+				List<GroupOption> kmGroups = await FetchGroups(cl_472.config.GatewayUrl, cl_472.http);
+				List<GroupOption> kmMatch = kmGroups.Where((GroupOption go) => go.Jid.Length > 0 && go.Subject.IndexOf(kmGroup, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+				if (kmMatch.Count == 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Grup \"" + kmGroup + "\" tidak ketemu." });
+					return Results.Json(new { ok = true, action = "kirim-notfound" });
+				}
+				if (kmMatch.Count > 1)
+				{
+					string kmListed = string.Join(", ", kmMatch.Select((GroupOption m) => "\"" + m.Subject + "\""));
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Lebih dari satu grup cocok: " + kmListed + ". Perjelas namanya." });
+					return Results.Json(new { ok = true, action = "kirim-ambiguous" });
+				}
+				GroupOption kmTarget = kmMatch[0];
+				List<string> kmMentions = new List<string>();
+				List<(string jid, string number, string phone)> kmMembers = await FetchGroupMembers(cl_472.config.GatewayUrl, cl_472.http, kmTarget.Jid);
+				kmMsg = Regex.Replace(kmMsg, "@([A-Za-z0-9]+)", delegate(Match mt)
+				{
+					string tok = mt.Groups[1].Value;
+					string wantPhone = TagAliasStore.Get(tok) ?? "";
+					(string jid, string number, string phone) hit = default((string, string, string));
+					bool found = false;
+					if (wantPhone.Length > 0)
+					{
+						string wp = NumberUtil.Normalize(wantPhone);
+						foreach ((string jid, string number, string phone) mem in kmMembers)
+						{
+							if (NumberUtil.Normalize(mem.phone) == wp && mem.jid.Length > 0)
+							{
+								hit = mem;
+								found = true;
+								break;
+							}
+						}
+					}
+					else if (tok.Length >= 3 && tok.All(char.IsDigit))
+					{
+						List<(string jid, string number, string phone)> sfx = kmMembers.Where(delegate((string jid, string number, string phone) mem)
+						{
+							string pp = NumberUtil.Normalize(mem.phone);
+							return mem.jid.Length > 0 && pp.Length > 0 && (pp == tok || pp.EndsWith(tok));
+						}).ToList();
+						if (sfx.Count == 1)
+						{
+							hit = sfx[0];
+							found = true;
+						}
+					}
+					if (found)
+					{
+						kmMentions.Add(hit.jid);
+						return "@" + hit.number;
+					}
+					return mt.Value;
+				});
+				await PostJson(cl_472.http, outBase + "/send", new { jid = kmTarget.Jid, text = kmMsg, mentions = kmMentions });
+				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "✅ Terkirim ke \"" + kmTarget.Subject + "\": " + kmMsg });
+				return Results.Json(new { ok = true, action = "kirim", target = kmTarget.Jid });
+			}
+			if (isCommand && cmdName == "tag" && isConsole)
+			{
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Perintah ini khusus admin." });
+					return Results.Json(new { ok = true, action = "tag-denied" });
+				}
+				string tgArgs = cmdText.Substring(cl_472.config.CommandPrefix.Length).Trim();
+				if (tgArgs.Length >= "tag".Length) tgArgs = tgArgs.Substring("tag".Length).Trim();
+				if (tgArgs.Length == 0)
+				{
+					List<KeyValuePair<string, string>> tgAll = TagAliasStore.All();
+					string tgList = (tgAll.Count == 0) ? "Belum ada tag-alias. Set dengan: !tag <nama> = <nomor>" : ("Tag-alias tersimpan:\n" + string.Join("\n", tgAll.Select((KeyValuePair<string, string> kv) => "- @" + kv.Key + " -> " + kv.Value)));
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = tgList });
+					return Results.Json(new { ok = true, action = "tag-list" });
+				}
+				int tgEq = tgArgs.IndexOf('=');
+				if (tgEq < 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Format: !tag <nama> = <nomor>" });
+					return Results.Json(new { ok = true, action = "tag-usage" });
+				}
+				string tgKey = tgArgs.Substring(0, tgEq).Trim().TrimStart('@');
+				string tgVal = NumberUtil.Normalize(tgArgs.Substring(tgEq + 1));
+				if (tgKey.Length == 0 || tgVal.Length == 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Format: !tag <nama> = <nomor>" });
+					return Results.Json(new { ok = true, action = "tag-usage" });
+				}
+				TagAliasStore.Set(tgKey, tgVal);
+				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "✅ Oke, @" + tgKey + " = " + tgVal + ". Aku ingat." });
+				return Results.Json(new { ok = true, action = "tag-set" });
+			}
+			if (isCommand && cmdName == "untag" && isConsole)
+			{
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Perintah ini khusus admin." });
+					return Results.Json(new { ok = true, action = "untag-denied" });
+				}
+				string utgArgs = cmdText.Substring(cl_472.config.CommandPrefix.Length).Trim();
+				if (utgArgs.Length >= "untag".Length) utgArgs = utgArgs.Substring("untag".Length).Trim();
+				utgArgs = utgArgs.TrimStart('@');
+				if (utgArgs.Length == 0)
+				{
+					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Format: !untag <nama>" });
+					return Results.Json(new { ok = true, action = "untag-usage" });
+				}
+				bool utgRemoved = TagAliasStore.Remove(utgArgs);
+				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = utgRemoved ? ("Oke, tag-alias @" + utgArgs + " dihapus.") : ("Tag-alias @" + utgArgs + " tidak ada.") });
+				return Results.Json(new { ok = true, action = "untag" });
 			}
 			if (isCommand && cmdName == "alias" && isConsole)
 			{
@@ -7240,6 +7408,34 @@ public class Program
 		return result;
 	}
 
+	internal static async Task<List<(string jid, string number, string phone)>> FetchGroupMembers(string gatewayUrl, HttpClient http, string groupJid)
+	{
+		List<(string, string, string)> list = new List<(string, string, string)>();
+		try
+		{
+			using HttpResponseMessage r = await http.GetAsync(gatewayUrl + "/group-members?jid=" + Uri.EscapeDataString(groupJid));
+			if (!r.IsSuccessStatusCode)
+			{
+				return list;
+			}
+			using JsonDocument doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
+			if (doc.RootElement.TryGetProperty("members", out var arr))
+			{
+				foreach (JsonElement m in arr.EnumerateArray())
+				{
+					string jid = (m.TryGetProperty("jid", out var j) ? (j.GetString() ?? "") : "");
+					string number = (m.TryGetProperty("number", out var n) ? (n.GetString() ?? "") : "");
+					string phone = (m.TryGetProperty("phone", out var p) ? (p.GetString() ?? "") : "");
+					list.Add((jid, number, phone));
+				}
+			}
+		}
+		catch
+		{
+		}
+		return list;
+	}
+
 	[CompilerGenerated]
 	internal static async Task<List<GroupOption>> FetchGroups(string gatewayUrl, HttpClient http)
 	{
@@ -9116,6 +9312,82 @@ internal class FloodTracker
 				}
 			}
 			return (flood: flag, warn: item);
+		}
+	}
+}
+internal static class TagAliasStore
+{
+	private static string _path = "";
+
+	private static Dictionary<string, string> _map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+	private static readonly object _lock = new object();
+
+	public static void Init(string path)
+	{
+		_path = path;
+		try
+		{
+			if (File.Exists(path))
+			{
+				Dictionary<string, string>? d = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path));
+				if (d != null)
+				{
+					_map = new Dictionary<string, string>(d, StringComparer.OrdinalIgnoreCase);
+				}
+			}
+		}
+		catch
+		{
+		}
+	}
+
+	public static string? Get(string alias)
+	{
+		lock (_lock)
+		{
+			return _map.TryGetValue((alias ?? "").Trim(), out string? v) ? v : null;
+		}
+	}
+
+	public static void Set(string alias, string name)
+	{
+		lock (_lock)
+		{
+			_map[(alias ?? "").Trim()] = name;
+			Save();
+		}
+	}
+
+	public static bool Remove(string alias)
+	{
+		lock (_lock)
+		{
+			bool r = _map.Remove((alias ?? "").Trim());
+			if (r)
+			{
+				Save();
+			}
+			return r;
+		}
+	}
+
+	public static List<KeyValuePair<string, string>> All()
+	{
+		lock (_lock)
+		{
+			return _map.OrderBy((KeyValuePair<string, string> kv) => kv.Key).ToList();
+		}
+	}
+
+	private static void Save()
+	{
+		try
+		{
+			File.WriteAllText(_path, JsonSerializer.Serialize(_map, new JsonSerializerOptions { WriteIndented = true }));
+		}
+		catch
+		{
 		}
 	}
 }
