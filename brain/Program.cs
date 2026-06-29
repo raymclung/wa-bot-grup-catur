@@ -4336,7 +4336,7 @@ public class Program
 				string? kpAlias = AliasStore.Get(kpName);
 				if (!string.IsNullOrEmpty(kpAlias)) kpName = kpAlias;
 				List<GroupOption> kpGroups = await FetchGroups(cl_472.config.GatewayUrl, cl_472.http);
-				List<GroupOption> kpMatch = kpGroups.Where((GroupOption go) => go.Jid.Length > 0 && go.Subject.IndexOf(kpName, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+				List<GroupOption> kpMatch = MatchGroups(kpGroups, kpName);
 				if (kpMatch.Count == 0)
 				{
 					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Grup \"" + kpName + "\" tidak ketemu. Cek nama persisnya." });
@@ -4410,7 +4410,7 @@ public class Program
 				string? kmAlias = AliasStore.Get(kmGroup);
 				if (!string.IsNullOrEmpty(kmAlias)) kmGroup = kmAlias;
 				List<GroupOption> kmGroups = await FetchGroups(cl_472.config.GatewayUrl, cl_472.http);
-				List<GroupOption> kmMatch = kmGroups.Where((GroupOption go) => go.Jid.Length > 0 && go.Subject.IndexOf(kmGroup, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+				List<GroupOption> kmMatch = MatchGroups(kmGroups, kmGroup);
 				if (kmMatch.Count == 0)
 				{
 					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Grup \"" + kmGroup + "\" tidak ketemu." });
@@ -4550,7 +4550,7 @@ public class Program
 					return Results.Json(new { ok = true, action = "alias-usage" });
 				}
 				List<GroupOption> alGroups = await FetchGroups(cl_472.config.GatewayUrl, cl_472.http);
-				List<GroupOption> alMatch = alGroups.Where((GroupOption go) => go.Jid.Length > 0 && go.Subject.IndexOf(alVal, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+				List<GroupOption> alMatch = MatchGroups(alGroups, alVal);
 				if (alMatch.Count == 0)
 				{
 					await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = "Grup \"" + alVal + "\" tidak ketemu. Alias tidak disimpan." });
@@ -7406,6 +7406,16 @@ public class Program
 			result = true;
 		}
 		return result;
+	}
+
+	internal static List<GroupOption> MatchGroups(List<GroupOption> groups, string name)
+	{
+		List<GroupOption> exact = groups.Where((GroupOption go) => go.Jid.Length > 0 && go.Subject.Equals(name, StringComparison.OrdinalIgnoreCase)).ToList();
+		if (exact.Count > 0)
+		{
+			return exact;
+		}
+		return groups.Where((GroupOption go) => go.Jid.Length > 0 && go.Subject.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
 	}
 
 	internal static async Task<List<(string jid, string number, string phone)>> FetchGroupMembers(string gatewayUrl, HttpClient http, string groupJid)
