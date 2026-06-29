@@ -8,9 +8,16 @@ using Microsoft.Extensions.Logging;
 
 // ============================================================
 //  LCI (Liga Catur Indonesia) API client - pembungkus WAbot.asmx.
-//  Port dari tools/manual-pairing/pair.js: lookup -> pair -> results.
-//  ASMX balas XML  <string xmlns="...">ISI-JSON</string>  -> dikupas jadi JSON.
-//  Token diambil dari config.WabotToken (di-set dari secrets.json "wabotToken").
+//  Port dari tools/manual-pairing/pair.js + method tambahan.
+//  ASMX balas XML  <string xmlns="...">ISI</string>  -> dikupas; ISI bisa JSON / teks.
+//  Token dari config.WabotToken (di-set dari secrets.json "wabotToken").
+//
+//  Operasi WAbot.asmx:
+//    GetLichessUserByPhone(Phone)
+//    PairLichessUsernames(WhitePlayer,BlackPlayer,ClockLimit,ClockIncrement,IsRated,Variant)
+//    StartBulkPairingClocks(BulkPairingID)
+//    CancelBulkPairing(BulkPairingID)
+//    GetBulkPairingResults(BulkPairingID)
 // ============================================================
 
 internal class LciConfig
@@ -45,10 +52,18 @@ internal static class LciClient
 		public string Message = "";
 	}
 
+	public sealed class ActionResult
+	{
+		public bool Success;
+		public string Message = "";
+		public string Raw = "";
+	}
+
 	private static readonly Regex XmlDecl = new Regex("<\\?xml[^>]*\\?>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 	private static readonly Regex StringTag = new Regex("</?string[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-	private static async Task<JsonElement?> Call(AppConfig config, HttpClient http, string method, Dictionary<string, string> form, ILogger logger)
+	// POST form-urlencoded {Token, ...params} -> kupas <string>...</string> -> teks mentah (JSON / biasa).
+	private static async Task<string?> CallRaw(AppConfig config, HttpClient http, string method, Dictionary<string, string> form, ILogger logger)
 	{
 		try
 		{
@@ -62,14 +77,7 @@ internal static class LciClient
 			using FormUrlEncodedContent content = new FormUrlEncodedContent(body);
 			using HttpResponseMessage r = await http.PostAsync(baseUrl + "/" + method, content);
 			string xml = await r.Content.ReadAsStringAsync();
-			string inner = StringTag.Replace(XmlDecl.Replace(xml, ""), "").Trim();
-			if (inner.Length == 0 || (inner[0] != '{' && inner[0] != '['))
-			{
-				logger.LogWarning("LCI {Method} balas non-JSON: {Body}", method, (inner.Length > 120) ? inner.Substring(0, 120) : inner);
-				return null;
-			}
-			using JsonDocument doc = JsonDocument.Parse(inner);
-			return doc.RootElement.Clone();
+			return StringTag.Replace(XmlDecl.Replace(xml, ""), "").Trim();
 		}
 		catch (Exception ex)
 		{
@@ -78,7 +86,30 @@ internal static class LciClient
 		}
 	}
 
-	// LANGKAH 1: nomor HP -> user Lichess (found / verified / handle).
+	private static async Task<JsonElement?> Call(AppConfig config, HttpClient http, string method, Dictionary<string, string> form, ILogger logger)
+	{
+		string? inner = await CallRaw(config, http, method, form, logger);
+		if (inner == null || inner.Length == 0 || (inner[0] != '{' && inner[0] != '['))
+		{
+			if (!string.IsNullOrEmpty(inner))
+			{
+				logger.LogWarning("LCI {Method} balas non-JSON: {Body}", method, (inner.Length > 120) ? inner.Substring(0, 120) : inner);
+			}
+			return null;
+		}
+		try
+		{
+			using JsonDocument doc = JsonDocument.Parse(inner);
+			return doc.RootElement.Clone();
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning("LCI {Method} parse gagal: {Msg}", method, ex.Message);
+			return null;
+		}
+	}
+
+	// nomor HP -> user Lichess (found / verified / handle).
 	public static async Task<LookupResult> LookupByPhone(AppConfig config, HttpClient http, string phone, ILogger logger)
 	{
 		LookupResult res = new LookupResult();
@@ -94,7 +125,7 @@ internal static class LciClient
 		return res;
 	}
 
-	// LANGKAH 2: 2 username -> BulkID + link game (white_url).
+	// 2 username + TC -> BulkID + link game. rated=false utk UNRATED.
 	public static async Task<PairResult> Pair(AppConfig config, HttpClient http, string white, string black, int limitSec, int incSec, bool rated, string variant, ILogger logger)
 	{
 		Dictionary<string, string> p = new Dictionary<string, string>
@@ -119,6 +150,54 @@ internal static class LciClient
 			res.Black = GetStr(e, "black_player");
 			res.Message = GetStr(e, "Message");
 		}
+		return res;
+	}
+
+	// Mulai jam catur untuk satu BulkID.
+	public static Task<ActionResult> StartClocks(AppConfig config, HttpClient http, string bulkId, ILogger logger)
+	{
+		return ActionByBulk(config, http, "StartBulkPairingClocks", bulkId, logger);
+	}
+
+	// Batalkan board untuk satu BulkID.
+	public static Task<ActionResult> CancelBoard(AppConfig config, HttpClient http, string bulkId, ILogger logger)
+	{
+		return ActionByBulk(config, http, "CancelBulkPairing", bulkId, logger);
+	}
+
+	// Hasil game untuk satu BulkID (teks/JSON mentah, biar pemanggil yang parse).
+	public static async Task<string> Results(AppConfig config, HttpClient http, string bulkId, ILogger logger)
+	{
+		string? raw = await CallRaw(config, http, "GetBulkPairingResults", new Dictionary<string, string> { ["BulkPairingID"] = bulkId }, logger);
+		return raw ?? "";
+	}
+
+	private static async Task<ActionResult> ActionByBulk(AppConfig config, HttpClient http, string method, string bulkId, ILogger logger)
+	{
+		ActionResult res = new ActionResult();
+		string? raw = await CallRaw(config, http, method, new Dictionary<string, string> { ["BulkPairingID"] = bulkId }, logger);
+		if (raw == null)
+		{
+			return res;
+		}
+		res.Raw = raw;
+		if (raw.Length > 0 && (raw[0] == '{' || raw[0] == '['))
+		{
+			try
+			{
+				using JsonDocument doc = JsonDocument.Parse(raw);
+				res.Success = GetBool(doc.RootElement, "success");
+				res.Message = GetStr(doc.RootElement, "Message");
+				return res;
+			}
+			catch
+			{
+			}
+		}
+		// balasan teks biasa: anggap sukses kalau tidak menyebut error/gagal/false.
+		string low = raw.ToLowerInvariant();
+		res.Success = low.Length > 0 && !low.Contains("error") && !low.Contains("gagal") && !low.Contains("false") && !low.Contains("fail");
+		res.Message = raw;
 		return res;
 	}
 
