@@ -7580,7 +7580,7 @@ public class Program
 		if (announce.Success)
 		{
 			string groupName = announce.Groups[1].Value.Trim().Trim('\"');
-			string body = announce.Groups[2].Value.Trim();
+			string body = announce.Groups[2].Value.Trim().Trim('<', '>').Trim();
 			if (groupName.Length == 0 || body.Length == 0)
 			{
 				return "Format: kirim ke <nama grup>: <pesan>";
@@ -7592,7 +7592,7 @@ public class Program
 
 	internal static async Task<string> PrepareDmPending(AppConfig config, HttpClient http, string key, string groupName, string kind, string body, string level, string title, ILogger logger)
 	{
-		string name = groupName;
+		string name = groupName.Trim('<', '>').Trim();
 		string? alias = AliasStore.Get(name);
 		if (!string.IsNullOrEmpty(alias))
 		{

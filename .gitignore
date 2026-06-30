@@ -53,3 +53,5 @@ gateway/qr.html
 .vs/
 Thumbs.db
 brain/Properties/
+*.bak-*
+brain/*.bak-*
