@@ -757,10 +757,26 @@ async function startSocket() {
       // nomornya belum dikenal (mirip resolusi nomor pengirim). Penting untuk
       // perintah yang andalkan nomor pemain (mis. @bot turnamen @A @B @C @D).
       const mentionJids = (ctxMentions || []).filter((j) => !botIds.includes(digits(j)));
-      let mentionPairs = mentionJids.map((j) => ({ lid: digits(j), phone: resolvePhone(j) || '' }));
-      if (mentionPairs.some((m) => !m.phone) && String(jid).endsWith('@g.us')) {
-        await refreshGroupLidMap(jid);
-        mentionPairs = mentionJids.map((j) => ({ lid: digits(j), phone: resolvePhone(j) || '' }));
+      const mentionPairs = [];
+      for (const mj of mentionJids) {
+        let phone = resolvePhone(mj) || '';
+        // Grup LID-only tak punya nomor di metadata. Baileys 7 menyimpan peta
+        // LID<->nomor yang PERSISTEN (dari riwayat pesan) -> pakai getPNForLID.
+        if (!phone) {
+          try {
+            const lm = sock && sock.signalRepository && sock.signalRepository.lidMapping;
+            if (lm && typeof lm.getPNForLID === 'function') {
+              const pn = await lm.getPNForLID(digits(mj) + '@lid');
+              if (pn) {
+                phone = digits(pn);
+                setLid(digits(mj), phone);
+              }
+            }
+          } catch (e) {
+            /* abaikan: biarkan phone kosong */
+          }
+        }
+        mentionPairs.push({ lid: digits(mj), phone });
       }
 
       // Pesan yang di-reply (untuk !lapor): teks + penulis pesan yang dikutip.
