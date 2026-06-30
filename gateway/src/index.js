@@ -881,6 +881,30 @@ function startServer() {
     }
   });
 
+  // DEBUG: cek resolusi LID -> nomor (peta in-memory vs store persisten Baileys).
+  app.get('/debug/lid', async (req, res) => {
+    try {
+      const lid = digits(req.query.lid || '');
+      if (!lid) return res.status(400).json({ ok: false, error: 'lid wajib' });
+      const fromMap = lidToPhone.get(lid) || '';
+      let fromBaileys = '';
+      try {
+        const lm = sock && sock.signalRepository && sock.signalRepository.lidMapping;
+        if (lm && typeof lm.getPNForLID === 'function') {
+          const pn = await lm.getPNForLID(lid + '@lid');
+          fromBaileys = pn ? digits(pn) : '(null)';
+        } else {
+          fromBaileys = '(API tidak ada)';
+        }
+      } catch (e) {
+        fromBaileys = 'ERR:' + e.message;
+      }
+      res.json({ ok: true, lid, fromMap, fromBaileys });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
   // Daftar anggota satu grup (jid + nomor) \u2014 untuk mengisi adminNumbers dari grup admin.
   app.get('/group-members', async (req, res) => {
     const jid = req.query.jid;
