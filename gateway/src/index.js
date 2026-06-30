@@ -753,6 +753,16 @@ async function startSocket() {
         (ctxMentions.some((j) => botIds.includes(digits(j))) ||
           botIds.some((n) => n && text.includes('@' + n)));
 
+      // Mention -> {lid, phone}. Lazy-refresh peta LID grup kalau ada tag yang
+      // nomornya belum dikenal (mirip resolusi nomor pengirim). Penting untuk
+      // perintah yang andalkan nomor pemain (mis. @bot turnamen @A @B @C @D).
+      const mentionJids = (ctxMentions || []).filter((j) => !botIds.includes(digits(j)));
+      let mentionPairs = mentionJids.map((j) => ({ lid: digits(j), phone: resolvePhone(j) || '' }));
+      if (mentionPairs.some((m) => !m.phone) && String(jid).endsWith('@g.us')) {
+        await refreshGroupLidMap(jid);
+        mentionPairs = mentionJids.map((j) => ({ lid: digits(j), phone: resolvePhone(j) || '' }));
+      }
+
       // Pesan yang di-reply (untuk !lapor): teks + penulis pesan yang dikutip.
       let quotedText = '';
       let quotedAuthor = '';
@@ -780,9 +790,7 @@ async function startSocket() {
         edited: !!editInfo,
         key: src.key, // key konten yang dimoderasi (asli atau target edit)
         mentionedBot,
-        mentions: (ctxMentions || [])
-          .filter((j) => !botIds.includes(digits(j)))
-          .map((j) => ({ lid: digits(j), phone: resolvePhone(j) || '' })),
+        mentions: mentionPairs,
         quotedText,
         quotedAuthor,
         quotedId,
