@@ -1,0 +1,42 @@
+[
+  {
+    "bulkId": "MPLJOrRW",
+    "gameId": "hsTdr5ws",
+    "white": "Mikaysr",
+    "black": "ade21h",
+    "url": "https://lichess.org/hsTdr5ws",
+    "clockLimit": "300",
+    "clockIncrement": "3",
+    "rated": false,
+    "variant": "standard",
+    "createdAt": "2026-06-28T00:00:00.000Z",
+    "result": {
+      "success": true,
+      "Message": "",
+      "bulk_pairing_id": "MPLJOrRW",
+      "total_games": 1,
+      "total_finished": 1,
+      "all_finished": true,
+      "is_429": false,
+      "games": [
+        {
+          "lichess_game_id": "hsTdr5ws",
+          "white": "Mikaysr",
+          "black": "Ade21h",
+          "result": "1-0",
+          "is_finished": true,
+          "termination": "Normal",
+          "utc_date": "2026.06.28",
+          "utc_time": "19:05:48",
+          "variant": "Standard",
+          "time_control": "300+3",
+          "white_url": "https://lichess.org/hsTdr5ws",
+          "black_url": "https://lichess.org/hsTdr5ws/black",
+          "moves": "1. g3 d5 2. Bg2 Nf6 3. Nf3 g6 4. O-O Bg7 5. d3 Nc6 6. Nbd2 O-O 7. e4 dxe4 8. Nxe4 e5 9. Bg5 h6 10. Nxf6+ Bxf6 11. Bxh6 Bg7 12. Qd2 Ne7 13. Bxg7 Kxg7 14. Nxe5 Nf5 15. Rae1 Qf6 16. Qc3 Be6 17. g4 Nd6 18. g5 Qf5 19. Ng4+ 1-0"
+        }
+      ],
+      "lichess_raw_pgn": "[Event \"casual blitz game\"]\n[Site \"https://lichess.org/hsTdr5ws\"]\n[Date \"2026.06.28\"]\n[Round \"-\"]\n[White \"Mikaysr\"]\n[Black \"Ade21h\"]\n[Result \"1-0\"]\n[GameId \"hsTdr5ws\"]\n[UTCDate \"2026.06.28\"]\n[UTCTime \"19:05:48\"]\n[WhiteElo \"2361\"]\n[BlackElo \"1729\"]\n[Variant \"Standard\"]\n[TimeControl \"300+3\"]\n[ECO \"A00\"]\n[Termination \"Normal\"]\n\n1. g3 d5 2. Bg2 Nf6 3. Nf3 g6 4. O-O Bg7 5. d3 Nc6 6. Nbd2 O-O 7. e4 dxe4 8. Nxe4 e5 9. Bg5 h6 10. Nxf6+ Bxf6 11. Bxh6 Bg7 12. Qd2 Ne7 13. Bxg7 Kxg7 14. Nxe5 Nf5 15. Rae1 Qf6 16. Qc3 Be6 17. g4 Nd6 18. g5 Qf5 19. Ng4+ 1-0\n\n\n",
+      "lichess_error_json": ""
+    }
+  }
+]

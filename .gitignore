@@ -35,8 +35,15 @@ RECOVERY/
 brain/config/*.bak-*
 gateway/*.bak-*
 
-# Auth archive (sesi WhatsApp - sensitif)
+# Auth archive / backup (sesi WhatsApp - SENSITIF, jangan commit)
 gateway/auth-archive-*/
+gateway/auth-backup-*/
+gateway/.last-auth-backup
+gateway/.baileys-version-before
+
+# Backup source decompile / eksperimen (bukan source-of-truth)
+brain/*.bak-*
+gateway-test7/
 
 # WhatsApp QR (sensitif)
 gateway/qr.png

@@ -1005,6 +1005,12 @@ public class Program
 				});
 			}
 			string qDM;
+			string replyJidDM = ((senderPhone.Length > 0) ? (senderPhone + "@s.whatsapp.net") : cl_278.msg.Jid);
+			bool directSentDM = await PostJson(http, outBase + "/send", new
+			{
+				jid = replyJidDM,
+				text = replyDM
+			});
 			if (!string.IsNullOrWhiteSpace(consoleJid))
 			{
 				string who = ((!string.IsNullOrWhiteSpace(cl_278.msg.PushName)) ? cl_278.msg.PushName : ("@" + senderNum));
@@ -1017,21 +1023,18 @@ public class Program
 				return Results.Json(new
 				{
 					ok = true,
-					action = "dm-to-console",
+					action = "dm-chat-console-copy",
+					replyJid = replyJidDM,
+					directSent = directSentDM,
 					consoleJid = consoleJid
 				});
 			}
-			string replyJidDM = ((senderPhone.Length > 0) ? (senderPhone + "@s.whatsapp.net") : cl_278.msg.Jid);
-			await PostJson(http, outBase + "/send", new
-			{
-				jid = replyJidDM,
-				text = replyDM
-			});
 			return Results.Json(new
 			{
 				ok = true,
 				action = "dm-chat",
-				replyJid = replyJidDM
+				replyJid = replyJidDM,
+				directSent = directSentDM
 			});
 			IL_aa9d:
 			audit.Write(cl_278.msg.Jid, cl_278.msg.Participant, cl_278.msg.PushName, matched.Id, count, cl_278.msg.Text);
@@ -4879,6 +4882,12 @@ public class Program
 				});
 			}
 			string qDM;
+			string replyJidDM = ((senderPhone.Length > 0) ? (senderPhone + "@s.whatsapp.net") : msg.Jid);
+			bool directSentDM = await PostJson(cl_472.http, outBase + "/send", new
+			{
+				jid = replyJidDM,
+				text = replyDM
+			});
 			if (!string.IsNullOrWhiteSpace(consoleJid))
 			{
 				string who = ((!string.IsNullOrWhiteSpace(msg.PushName)) ? msg.PushName : ("@" + senderNum));
@@ -4891,21 +4900,18 @@ public class Program
 				return Results.Json(new
 				{
 					ok = true,
-					action = "dm-to-console",
+					action = "dm-chat-console-copy",
+					replyJid = replyJidDM,
+					directSent = directSentDM,
 					consoleJid = consoleJid
 				});
 			}
-			string replyJidDM = ((senderPhone.Length > 0) ? (senderPhone + "@s.whatsapp.net") : msg.Jid);
-			await PostJson(cl_472.http, outBase + "/send", new
-			{
-				jid = replyJidDM,
-				text = replyDM
-			});
 			return Results.Json(new
 			{
 				ok = true,
 				action = "dm-chat",
-				replyJid = replyJidDM
+				replyJid = replyJidDM,
+				directSent = directSentDM
 			});
 			IL_aa9d:
 			cl_472.audit.Write(msg.Jid, msg.Participant, msg.PushName, matched.Id, count, msg.Text);

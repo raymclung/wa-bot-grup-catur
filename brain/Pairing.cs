@@ -20,7 +20,21 @@ internal static class PairingCommand
 {
 	private static readonly object _lock = new object();
 
-	private static readonly Dictionary<string, string> _lastBulk = new Dictionary<string, string>();
+	// Catatan board per grup (untuk start/cancel/hasil/list + auto-umumkan hasil).
+	private sealed class Board
+	{
+		public string BulkId = "";
+		public string White = "";
+		public string Black = "";
+		public string Url = "";
+		public bool Rated;
+		public bool Done;   // selesai+diumumkan ATAU dibatalkan -> berhenti dipantau
+		public int Polls;
+	}
+
+	private static readonly Dictionary<string, List<Board>> _boards = new Dictionary<string, List<Board>>();
+
+	private static volatile bool _pollerStarted = false;
 
 	private static readonly Regex GpRx = new Regex("g?\\s*(\\d{1,3})\\s*\\+\\s*(\\d{1,2})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 	private static readonly Regex MenitRx = new Regex("(\\d{1,3})\\s*menit", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -39,9 +53,12 @@ internal static class PairingCommand
 		string t = (msg.Text ?? "").ToLowerInvariant();
 		string bulkArg = ExtractBulkId(msg.Text ?? "");
 		bool isPair = t.Contains("pair") || t.Contains("pasang");
-		bool isStart = StartRx.IsMatch(t) && (bulkArg.Length > 0 || t.Contains("start") || t.Contains("jam") || t.Contains("clock"));
-		bool isCancel = CancelRx.IsMatch(t);
-		if (!isPair && !isStart && !isCancel)
+		bool isStart = !isPair && StartRx.IsMatch(t) && (bulkArg.Length > 0 || t.Contains("start") || t.Contains("jam") || t.Contains("clock"));
+		bool isCancel = !isPair && CancelRx.IsMatch(t);
+		bool isInfo = !isPair && (t.Contains("info") || t.Contains("profil"));
+		bool isResult = !isPair && (t.Contains("hasil") || t.Contains("result") || t.Contains("skor") || t.Contains("score"));
+		bool isBoards = !isPair && (t.Contains("boards") || t.Contains("daftar board") || t.Contains("papan aktif"));
+		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards)
 		{
 			return null;
 		}
@@ -60,6 +77,10 @@ internal static class PairingCommand
 				return "pair-cancel-none";
 			}
 			LciClient.ActionResult ar = await LciClient.CancelBoard(config, http, bulkC, logger);
+			if (ar.Success)
+			{
+				MarkDone(msg.Jid, bulkC);
+			}
 			await Send(http, outBase, msg.Jid, ar.Success ? "Oke, board dibatalkan." : ("Gagal batal board. " + Clip(ar.Message)), null, logger);
 			return "pair-cancel";
 		}
@@ -74,6 +95,89 @@ internal static class PairingCommand
 			LciClient.ActionResult ar2 = await LciClient.StartClocks(config, http, bulkS, logger);
 			await Send(http, outBase, msg.Jid, ar2.Success ? "⏱️ Jam dimulai. Selamat bertanding!" : ("Gagal mulai jam. " + Clip(ar2.Message)), null, logger);
 			return "pair-start";
+		}
+
+		// ===== HASIL =====  @bot hasil [<BulkID>]  -> skor game (board terakhir kalau ID tak disebut)
+		if (isResult)
+		{
+			string bidR = (bulkArg.Length > 0) ? bulkArg : GetLast(msg.Jid);
+			if (bidR.Length == 0)
+			{
+				await Send(http, outBase, msg.Jid, "Belum ada board. Sebutkan BulkID: @bot hasil <BulkID>", null, logger);
+				return "result-none";
+			}
+			LciClient.ResultInfo ri = await LciClient.ResultsParsed(config, http, bidR, logger);
+			if (!ri.Ok)
+			{
+				await Send(http, outBase, msg.Jid, "Board tidak ditemukan / belum ada hasil.", null, logger);
+				return "result-missing";
+			}
+			if (ri.Summary.Length > 0)
+			{
+				await Send(http, outBase, msg.Jid, "♟️ Hasil:\n" + ri.Summary + (ri.AllFinished ? "" : "\n(sebagian masih berjalan)"), null, logger);
+			}
+			else
+			{
+				await Send(http, outBase, msg.Jid, "Game belum selesai. Sabar ya 🙂", null, logger);
+			}
+			return "result";
+		}
+
+		// ===== DAFTAR BOARD =====  @bot boards  -> board aktif di grup ini
+		if (isBoards)
+		{
+			List<Board> snap;
+			lock (_lock)
+			{
+				snap = (_boards.TryGetValue(msg.Jid, out List<Board>? l) && l != null) ? new List<Board>(l) : new List<Board>();
+			}
+			List<Board> active = snap.FindAll((Board b) => !b.Done);
+			if (active.Count == 0)
+			{
+				await Send(http, outBase, msg.Jid, "Belum ada board aktif di grup ini.", null, logger);
+				return "boards-none";
+			}
+			StringBuilder sbb = new StringBuilder("Board aktif:\n");
+			foreach (Board b in active)
+			{
+				sbb.Append("• " + b.White + " vs " + b.Black + "\n  " + b.Url + "  (" + b.BulkId + ")\n");
+			}
+			await Send(http, outBase, msg.Jid, sbb.ToString().TrimEnd(), null, logger);
+			return "boards";
+		}
+
+		// ===== INFO PEMAIN =====  @bot info @A [@B ...]  -> nama + handle Lichess + status verifikasi
+		if (isInfo)
+		{
+			List<MentionPair> who = new List<MentionPair>();
+			foreach (MentionPair m in (msg.Mentions ?? Array.Empty<MentionPair>()))
+			{
+				if (!string.IsNullOrEmpty(m.Phone))
+				{
+					who.Add(m);
+				}
+			}
+			if (who.Count == 0)
+			{
+				await Send(http, outBase, msg.Jid, "Tag pemain yang mau dilihat. Contoh: @bot info @NamaPemain", null, logger);
+				return "info-need-mention";
+			}
+			StringBuilder sb = new StringBuilder();
+			foreach (MentionPair m in who)
+			{
+				LciClient.LookupResult lu = await LciClient.LookupByPhone(config, http, m.Phone, logger);
+				if (lu.Found)
+				{
+					string nm = (!string.IsNullOrWhiteSpace(lu.FullName) ? lu.FullName : ("@" + m.Lid));
+					sb.Append("• " + nm + " — Lichess: " + (lu.Handle.Length > 0 ? lu.Handle : "-") + (lu.Verified ? " ✓ terverifikasi" : " (belum verifikasi)") + "\n");
+				}
+				else
+				{
+					sb.Append("• @" + m.Lid + " — belum terdaftar di LCI (daftar: ligacatur.com/register)\n");
+				}
+			}
+			await Send(http, outBase, msg.Jid, sb.ToString().TrimEnd(), null, logger);
+			return "info";
 		}
 
 		// ===== PAIR =====
@@ -128,13 +232,22 @@ internal static class PairingCommand
 			await Send(http, outBase, msg.Jid, "Gagal membuat board. " + Clip(pr.Message), null, logger);
 			return "pair-fail";
 		}
-		SetLast(msg.Jid, pr.BulkId);
 		string ratedTxt = (rated ? "rated" : "unrated");
 		int mins = limit / 60;
 		string wName = (!string.IsNullOrWhiteSpace(lw.FullName) ? lw.FullName : (lw.Handle.Length > 0 ? lw.Handle : ("@" + wp.Lid)));
 		string bName = (!string.IsNullOrWhiteSpace(lb.FullName) ? lb.FullName : (lb.Handle.Length > 0 ? lb.Handle : ("@" + bp.Lid)));
+		AddBoard(msg.Jid, pr.BulkId, wName, bName, pr.Url, rated);
+		EnsurePoller(config, http, outBase, logger); // mulai pemantau hasil (auto-umumkan saat game kelar)
+		// Pair + langsung mulai jam kalau diminta ("mulai"/"langsung"/"sekaligus"/"gas").
+		bool startNow = t.Contains("mulai") || t.Contains("langsung") || t.Contains("sekaligus") || t.Contains("gas") || t.Contains(" now");
+		string startedTxt = "";
+		if (startNow)
+		{
+			LciClient.ActionResult sc = await LciClient.StartClocks(config, http, pr.BulkId, logger);
+			startedTxt = sc.Success ? "\n⏱️ Jam langsung dimulai. Gas!" : "";
+		}
 		// Plain text (tanpa italic/markdown) supaya gampang di-copy. Nama lengkap dari LCI (full_name).
-		string body = "♟️ Board siap! " + wName + " (putih) vs " + bName + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + Invite(pr.Url) + "\nBulkID: " + pr.BulkId + "\nMulai jam: @bot start " + pr.BulkId + "  ·  Batal: @bot cancel " + pr.BulkId;
+		string body = "♟️ Board siap! " + wName + " (putih) vs " + bName + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + Invite(pr.Url) + startedTxt + "\nBulkID: " + pr.BulkId + (startNow ? "" : ("\nMulai jam: @bot start " + pr.BulkId)) + "  ·  Batal: @bot cancel " + pr.BulkId;
 		await Send(http, outBase, msg.Jid, body, null, logger);
 		return "pair";
 	}
@@ -170,12 +283,16 @@ internal static class PairingCommand
 
 	// Ambil BulkID dari teks perintah start/cancel: token pertama yang BUKAN mention (@..),
 	// bukan kata kunci, panjang >= 3. "" kalau tak ada (-> pakai board terakhir grup).
-	private static readonly string[] _bulkKw = new string[] { "start", "mulai", "jalankan", "jam", "clock", "clocks", "cancel", "batal", "hapus", "board", "papan", "game", "pairing", "bulk", "id", "bulkid" };
+	private static readonly string[] _bulkKw = new string[] { "start", "mulai", "jalankan", "jam", "clock", "clocks", "cancel", "batal", "hapus", "board", "boards", "papan", "game", "pairing", "bulk", "id", "bulkid", "pair", "pasang", "info", "profil", "hasil", "result", "skor", "score", "rated", "unrated", "casual", "latihan", "langsung", "sekaligus", "gas", "now", "please", "tolong" };
+
+	private static readonly Regex BulkRx = new Regex("^[A-Za-z0-9]{6,16}$", RegexOptions.CultureInvariant);
 
 	private static string ExtractBulkId(string text)
 	{
-		foreach (string w in (text ?? "").Split(new char[] { ' ', '\t', '\n', '\r', ',', '.', ':' }, StringSplitOptions.RemoveEmptyEntries))
+		foreach (string w0 in (text ?? "").Split(new char[] { ' ', '\t', '\n', '\r', ',', '.', ':' }, StringSplitOptions.RemoveEmptyEntries))
 		{
+			// Buang format WhatsApp (_italic_, *bold*, ~coret~) yang sering nempel saat di-copy.
+			string w = w0.Trim('_', '*', '~');
 			if (w.StartsWith("@"))
 			{
 				continue;
@@ -184,7 +301,8 @@ internal static class PairingCommand
 			{
 				continue;
 			}
-			if (w.Length >= 3)
+			// BulkID Lichess = alfanumerik ~8 karakter. Ini menyaring "G5+1", "vs", "5", dll.
+			if (BulkRx.IsMatch(w))
 			{
 				return w;
 			}
@@ -211,19 +329,108 @@ internal static class PairingCommand
 	{
 		lock (_lock)
 		{
-			return _lastBulk.TryGetValue(jid, out string v) ? v : "";
+			if (_boards.TryGetValue(jid, out List<Board>? list) && list != null && list.Count > 0)
+			{
+				return list[list.Count - 1].BulkId;
+			}
+			return "";
 		}
 	}
 
-	private static void SetLast(string jid, string bulk)
+	private static void AddBoard(string jid, string bulkId, string white, string black, string url, bool rated)
+	{
+		if (string.IsNullOrEmpty(bulkId))
+		{
+			return;
+		}
+		lock (_lock)
+		{
+			if (!_boards.TryGetValue(jid, out List<Board>? list) || list == null)
+			{
+				list = new List<Board>();
+				_boards[jid] = list;
+			}
+			list.Add(new Board { BulkId = bulkId, White = white, Black = black, Url = url, Rated = rated });
+		}
+	}
+
+	private static void MarkDone(string jid, string bulkId)
 	{
 		lock (_lock)
 		{
-			if (!string.IsNullOrEmpty(bulk))
+			if (_boards.TryGetValue(jid, out List<Board>? list) && list != null)
 			{
-				_lastBulk[jid] = bulk;
+				foreach (Board b in list)
+				{
+					if (b.BulkId == bulkId)
+					{
+						b.Done = true;
+					}
+				}
 			}
 		}
+	}
+
+	// Pemantau hasil di latar belakang: tiap 45 dtk cek board yang belum selesai,
+	// umumkan skornya ke grup saat game kelar. Dimulai sekali (lazy) saat pairing pertama.
+	private static void EnsurePoller(AppConfig config, HttpClient http, string outBase, ILogger logger)
+	{
+		lock (_lock)
+		{
+			if (_pollerStarted)
+			{
+				return;
+			}
+			_pollerStarted = true;
+		}
+		_ = Task.Run(async delegate
+		{
+			while (true)
+			{
+				try
+				{
+					await Task.Delay(45000);
+					List<(string jid, Board b)> pending = new List<(string, Board)>();
+					lock (_lock)
+					{
+						foreach (KeyValuePair<string, List<Board>> kv in _boards)
+						{
+							foreach (Board b in kv.Value)
+							{
+								if (!b.Done)
+								{
+									pending.Add((kv.Key, b));
+								}
+							}
+						}
+					}
+					foreach ((string jid, Board b) in pending)
+					{
+						b.Polls++;
+						LciClient.ResultInfo ri = await LciClient.ResultsParsed(config, http, b.BulkId, logger);
+						if (ri.Ok && ri.AllFinished && ri.Summary.Length > 0)
+						{
+							lock (_lock)
+							{
+								b.Done = true;
+							}
+							await Send(http, outBase, jid, "♟️ Hasil: " + ri.Summary, null, logger);
+						}
+						else if (b.Polls > 240) // ~3 jam tak selesai -> berhenti pantau
+						{
+							lock (_lock)
+							{
+								b.Done = true;
+							}
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					logger.LogWarning("pair poller: {Msg}", ex.Message);
+				}
+			}
+		});
 	}
 
 	private static async Task Send(HttpClient http, string outBase, string jid, string text, string[]? mentionLids, ILogger logger)

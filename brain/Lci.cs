@@ -59,6 +59,22 @@ internal static class LciClient
 		public string Raw = "";
 	}
 
+	public sealed class GameResult
+	{
+		public string White = "";
+		public string Black = "";
+		public string Score = ""; // "1-0" / "0-1" / "1/2-1/2"
+		public bool Finished;
+	}
+
+	public sealed class ResultInfo
+	{
+		public bool Ok;            // dapat respon valid dari server
+		public bool AllFinished;   // semua game selesai
+		public List<GameResult> Games = new List<GameResult>();
+		public string Summary = ""; // mis. "Mikaysr 1-0 Ade21h"
+	}
+
 	private static readonly Regex XmlDecl = new Regex("<\\?xml[^>]*\\?>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 	private static readonly Regex StringTag = new Regex("</?string[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
@@ -170,6 +186,49 @@ internal static class LciClient
 	{
 		string? raw = await CallRaw(config, http, "GetBulkPairingResults", new Dictionary<string, string> { ["BulkPairingID"] = bulkId }, logger);
 		return raw ?? "";
+	}
+
+	// Hasil game yang sudah di-parse (skor + status selesai). Untuk fitur hasil/auto-umumkan.
+	public static async Task<ResultInfo> ResultsParsed(AppConfig config, HttpClient http, string bulkId, ILogger logger)
+	{
+		ResultInfo info = new ResultInfo();
+		string raw = await Results(config, http, bulkId, logger);
+		if (raw.Length == 0 || raw[0] != '{')
+		{
+			return info;
+		}
+		try
+		{
+			using JsonDocument doc = JsonDocument.Parse(raw);
+			JsonElement root = doc.RootElement;
+			info.Ok = true;
+			info.AllFinished = GetBool(root, "all_finished");
+			if (root.TryGetProperty("games", out JsonElement games) && games.ValueKind == JsonValueKind.Array)
+			{
+				List<string> parts = new List<string>();
+				foreach (JsonElement g in games.EnumerateArray())
+				{
+					GameResult gr = new GameResult
+					{
+						White = GetStr(g, "white"),
+						Black = GetStr(g, "black"),
+						Score = GetStr(g, "result"),
+						Finished = GetBool(g, "is_finished")
+					};
+					info.Games.Add(gr);
+					if (gr.Score.Length > 0)
+					{
+						parts.Add(gr.White + " " + gr.Score + " " + gr.Black);
+					}
+				}
+				info.Summary = string.Join("\n", parts);
+			}
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning("LCI results parse gagal: {Msg}", ex.Message);
+		}
+		return info;
 	}
 
 	private static async Task<ActionResult> ActionByBulk(AppConfig config, HttpClient http, string method, string bulkId, ILogger logger)
