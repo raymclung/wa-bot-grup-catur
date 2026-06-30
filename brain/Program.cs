@@ -43,6 +43,25 @@ using Svg.Skia;
 
 public class Program
 {
+	private static readonly object DmAnnounceLock = new object();
+
+	private static readonly Dictionary<string, DmAnnouncementPending> DmAnnouncePending = new Dictionary<string, DmAnnouncementPending>();
+
+	private sealed class DmAnnouncementPending
+	{
+		public string TargetJid { get; set; } = "";
+
+		public string TargetName { get; set; } = "";
+
+		public string Text { get; set; } = "";
+
+		public string Kind { get; set; } = "text";
+
+		public string Level { get; set; } = "";
+
+		public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+	}
+
 	[CompilerGenerated]
 	private sealed class DC_0_0
 	{
@@ -1079,24 +1098,32 @@ public class Program
 				string convDM = ConvMemory.Recent(memKeyDM);
 				string personaDM = (string.IsNullOrWhiteSpace(pcDM.Persona) ? "" : pcDM.Persona);
 				qDM = cmdText.Trim();
-				switch ((qDM.Length != 0) ? ChatIntents.Classify(qDM) : ChatIntent.Empty)
+				string? adminDmReply = await TryHandleDmAnnouncement(config, http, cl_278.msg, senderNum, senderPhone, qDM, app.Logger, config.Puzzle.RevealMinutes, puzzlePool.Count, async (jid, level) => { await PostPuzzleAsync(jid, false, null, PuzzleMove.DifficultySlot("puzzle " + level, config.Puzzle.RevealMinutes)); return true; });
+				if (adminDmReply != null)
 				{
-				case ChatIntent.Schedule:
-					replyDM = await CommandHandler.BuildSchedule(config, http, app.Logger);
-					break;
-				case ChatIntent.Result:
-					replyDM = await CommandHandler.BuildLatestResult(config, http, app.Logger);
-					break;
-				default:
-				{
-					string ansDM = await Ai.Ask(config.Ai, http, (qDM.Length == 0) ? "Halo" : qDM, app.Logger, personaDM, convDM);
-					replyDM = (string.IsNullOrWhiteSpace(ansDM) ? "Maaf, aku lagi belum bisa menjawab. Coba lagi sebentar ya." : ansDM);
-					if (replyDM.Length > config.Ai.MaxOutputChars)
-					{
-						replyDM = replyDM.Substring(0, config.Ai.MaxOutputChars) + "…";
-					}
-					break;
+					replyDM = adminDmReply;
 				}
+				else
+				{
+					switch ((qDM.Length != 0) ? ChatIntents.Classify(qDM) : ChatIntent.Empty)
+					{
+					case ChatIntent.Schedule:
+						replyDM = await CommandHandler.BuildSchedule(config, http, app.Logger);
+						break;
+					case ChatIntent.Result:
+						replyDM = await CommandHandler.BuildLatestResult(config, http, app.Logger);
+						break;
+					default:
+					{
+						string ansDM = await Ai.Ask(config.Ai, http, (qDM.Length == 0) ? "Halo" : qDM, app.Logger, personaDM, convDM);
+						replyDM = (string.IsNullOrWhiteSpace(ansDM) ? "Maaf, aku lagi belum bisa menjawab. Coba lagi sebentar ya." : ansDM);
+						if (replyDM.Length > config.Ai.MaxOutputChars)
+						{
+							replyDM = replyDM.Substring(0, config.Ai.MaxOutputChars) + "…";
+						}
+						break;
+					}
+					}
 				}
 				if (qDM.Length > 0)
 				{
@@ -4888,7 +4915,7 @@ public class Program
 				jid = replyJidDM,
 				text = replyDM
 			});
-			if (!string.IsNullOrWhiteSpace(consoleJid))
+			if (!directSentDM && !string.IsNullOrWhiteSpace(consoleJid))
 			{
 				string who = ((!string.IsNullOrWhiteSpace(msg.PushName)) ? msg.PushName : ("@" + senderNum));
 				string head = ((qDM.Length > 0) ? $"\ud83d\udce9 *DM dari {who}:* {qDM}\n\n" : ("\ud83d\udce9 *DM dari " + who + "*\n\n"));
@@ -4956,24 +4983,32 @@ public class Program
 				string convDM = ConvMemory.Recent(memKeyDM);
 				string personaDM = (string.IsNullOrWhiteSpace(pcDM.Persona) ? "" : pcDM.Persona);
 				qDM = cmdText.Trim();
-				switch ((qDM.Length != 0) ? ChatIntents.Classify(qDM) : ChatIntent.Empty)
+				string? adminDmReply = await TryHandleDmAnnouncement(cl_472.config, cl_472.http, msg, senderNum, senderPhone, qDM, cl_472.app.Logger, cl_472.config.Puzzle.RevealMinutes, cl_472.puzzlePool.Count, async (jid, level) => { await cl_472.PostPuzzleAsync(jid, false, null, PuzzleMove.DifficultySlot("puzzle " + level, cl_472.config.Puzzle.RevealMinutes)); return true; });
+				if (adminDmReply != null)
 				{
-				case ChatIntent.Schedule:
-					replyDM = await CommandHandler.BuildSchedule(cl_472.config, cl_472.http, cl_472.app.Logger);
-					break;
-				case ChatIntent.Result:
-					replyDM = await CommandHandler.BuildLatestResult(cl_472.config, cl_472.http, cl_472.app.Logger);
-					break;
-				default:
-				{
-					string ansDM = await Ai.Ask(cl_472.config.Ai, cl_472.http, (qDM.Length == 0) ? "Halo" : qDM, cl_472.app.Logger, personaDM, convDM);
-					replyDM = (string.IsNullOrWhiteSpace(ansDM) ? "Maaf, aku lagi belum bisa menjawab. Coba lagi sebentar ya." : ansDM);
-					if (replyDM.Length > cl_472.config.Ai.MaxOutputChars)
-					{
-						replyDM = replyDM.Substring(0, cl_472.config.Ai.MaxOutputChars) + "…";
-					}
-					break;
+					replyDM = adminDmReply;
 				}
+				else
+				{
+					switch ((qDM.Length != 0) ? ChatIntents.Classify(qDM) : ChatIntent.Empty)
+					{
+					case ChatIntent.Schedule:
+						replyDM = await CommandHandler.BuildSchedule(cl_472.config, cl_472.http, cl_472.app.Logger);
+						break;
+					case ChatIntent.Result:
+						replyDM = await CommandHandler.BuildLatestResult(cl_472.config, cl_472.http, cl_472.app.Logger);
+						break;
+					default:
+					{
+						string ansDM = await Ai.Ask(cl_472.config.Ai, cl_472.http, (qDM.Length == 0) ? "Halo" : qDM, cl_472.app.Logger, personaDM, convDM);
+						replyDM = (string.IsNullOrWhiteSpace(ansDM) ? "Maaf, aku lagi belum bisa menjawab. Coba lagi sebentar ya." : ansDM);
+						if (replyDM.Length > cl_472.config.Ai.MaxOutputChars)
+						{
+							replyDM = replyDM.Substring(0, cl_472.config.Ai.MaxOutputChars) + "…";
+						}
+						break;
+					}
+					}
 				}
 				if (qDM.Length > 0)
 				{
@@ -7445,6 +7480,237 @@ public class Program
 		return result;
 	}
 
+	internal static string DmAnnounceKey(IncomingMessage msg, string senderNum, string senderPhone)
+	{
+		if (!string.IsNullOrWhiteSpace(senderPhone))
+		{
+			return NumberUtil.Normalize(senderPhone);
+		}
+		if (!string.IsNullOrWhiteSpace(senderNum))
+		{
+			return NumberUtil.Normalize(senderNum);
+		}
+		return msg.Jid ?? "";
+	}
+
+	internal static async Task<string?> TryHandleDmAnnouncement(AppConfig config, HttpClient http, IncomingMessage msg, string senderNum, string senderPhone, string q, ILogger logger, int puzzleRevealMinutes, int puzzlePoolCount, Func<string, string, Task<bool>> sendPuzzle)
+	{
+		string key = DmAnnounceKey(msg, senderNum, senderPhone);
+		if (key.Length == 0)
+		{
+			key = msg.Jid ?? "";
+		}
+		string raw = (q ?? "").Trim();
+		string low = raw.ToLowerInvariant();
+		if (Regex.IsMatch(low, "^(status|cek status)\\s+bot$|^bot\\s+(status|online)\\??$", RegexOptions.CultureInvariant))
+		{
+			return await BuildDmBotStatus(config, http, puzzlePoolCount);
+		}
+		DmAnnouncementPending? pending = null;
+		lock (DmAnnounceLock)
+		{
+			if (DmAnnouncePending.TryGetValue(key, out pending) && (DateTimeOffset.UtcNow - pending.CreatedAt).TotalMinutes > 10.0)
+			{
+				DmAnnouncePending.Remove(key);
+				pending = null;
+			}
+		}
+		if (pending != null)
+		{
+			if (low == "batal" || low == "cancel")
+			{
+				lock (DmAnnounceLock)
+				{
+					DmAnnouncePending.Remove(key);
+				}
+				return "Siap, dibatalkan.";
+			}
+			if (low == "ya" || low == "y" || low == "kirim" || low == "gas" || low == "ok" || low == "oke")
+			{
+				bool sent;
+				if (pending.Kind == "puzzle")
+				{
+					sent = await sendPuzzle(pending.TargetJid, pending.Level);
+				}
+				else
+				{
+					(string text, List<string> mentions) resolved = await ResolveOutgoingMentions(config, http, pending.TargetJid, pending.Text);
+					string[] mentions = pending.Kind == "pairing" ? ExtractWhatsAppMentions(resolved.text) : resolved.mentions.ToArray();
+					sent = await PostJson(http, ChannelRoute.BaseForJid(config, pending.TargetJid) + "/send", new { jid = pending.TargetJid, text = resolved.text, mentions = mentions });
+				}
+				lock (DmAnnounceLock)
+				{
+					DmAnnouncePending.Remove(key);
+				}
+				if (sent)
+				{
+					logger.LogInformation("DM admin action {Kind} sent to {Target} by {Sender}", pending.Kind, pending.TargetJid, key);
+					return (pending.Kind == "puzzle") ? ("Puzzle terkirim ke \"" + pending.TargetName + "\".") : ("Terkirim ke \"" + pending.TargetName + "\".");
+				}
+				return "Gagal kirim ke \"" + pending.TargetName + "\". Coba lagi sebentar.";
+			}
+			return "Masih ada preview. Balas *ya* untuk kirim, atau *batal*.";
+		}
+		Match draft = Regex.Match(raw, "^buat\\s+pengumuman\\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+		if (draft.Success)
+		{
+			string body = BuildAnnouncementDraft(draft.Groups[1].Value.Trim());
+			return "Draft pengumuman:\n\n" + body + "\n\nUntuk kirim, balas: kirim ke <nama grup>: " + body;
+		}
+		Match puzzle = Regex.Match(raw, "^(?:kirim\\s+)?puzzle\\s*(mudah|sedang|sulit|easy|medium|hard|gampang|susah)?\\s+ke\\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+		if (puzzle.Success)
+		{
+			string level = puzzle.Groups[1].Value.Trim().ToLowerInvariant();
+			string groupName = puzzle.Groups[2].Value.Trim().Trim('\"');
+			return await PrepareDmPending(config, http, key, groupName, "puzzle", "", level, "Preview puzzle siap", logger);
+		}
+		Match pair = Regex.Match(raw, "^pair(?:ing)?\\s+([^\\s]+)\\s+vs\\s+([^\\s]+)\\s+((?:G)?\\d+\\+\\d+)\\s+(rated|casual)\\s+(https?://lichess\\.org/[A-Za-z0-9]{8,12})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+		if (pair.Success)
+		{
+			string text = "Pairing Manual - Liga Catur\n\n" + pair.Groups[1].Value.Trim() + " (Putih) vs " + pair.Groups[2].Value.Trim() + " (Hitam)\n" + pair.Groups[3].Value.Trim().ToUpperInvariant() + " - " + pair.Groups[4].Value.Trim().ToLowerInvariant() + "\n\n" + pair.Groups[5].Value.Trim();
+			string enriched = await EnrichBroadcastText(text, http, logger, config);
+			string target = DefaultAnnouncementTarget(config);
+			if (target.Length == 0)
+			{
+				return "Pairing sudah diformat, tapi target grup belum jelas. Pakai: kirim ke <nama grup>: " + enriched;
+			}
+			return await PrepareDmPending(config, http, key, target, "pairing", enriched, "", "Preview pairing siap", logger);
+		}
+		Match announce = Regex.Match(raw, "^!?(?:kirim|umumkan|pengumuman)\\s+ke\\s+(.+?)\\s*:\\s*([\\s\\S]+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+		if (announce.Success)
+		{
+			string groupName = announce.Groups[1].Value.Trim().Trim('\"');
+			string body = announce.Groups[2].Value.Trim();
+			if (groupName.Length == 0 || body.Length == 0)
+			{
+				return "Format: kirim ke <nama grup>: <pesan>";
+			}
+			return await PrepareDmPending(config, http, key, groupName, "text", body, "", "Preview pengumuman siap", logger);
+		}
+		return null;
+	}
+
+	internal static async Task<string> PrepareDmPending(AppConfig config, HttpClient http, string key, string groupName, string kind, string body, string level, string title, ILogger logger)
+	{
+		string name = groupName;
+		string? alias = AliasStore.Get(name);
+		if (!string.IsNullOrEmpty(alias))
+		{
+			name = alias;
+		}
+		List<GroupOption> groups = await FetchGroups(config.GatewayUrl, http);
+		List<GroupOption> matches = MatchGroups(groups, name);
+		if (matches.Count == 0)
+		{
+			return "Grup \"" + name + "\" tidak ketemu.";
+		}
+		if (matches.Count > 1)
+		{
+			string listed = string.Join(", ", matches.Take(5).Select((GroupOption g) => "\"" + g.Subject + "\""));
+			return "Lebih dari satu grup cocok: " + listed + ". Perjelas namanya.";
+		}
+		GroupOption target = matches[0];
+		lock (DmAnnounceLock)
+		{
+			DmAnnouncePending[key] = new DmAnnouncementPending
+			{
+				TargetJid = target.Jid,
+				TargetName = target.Subject,
+				Text = body,
+				Kind = kind,
+				Level = level,
+				CreatedAt = DateTimeOffset.UtcNow
+			};
+		}
+		if (kind == "puzzle")
+		{
+			string lv = level.Length > 0 ? (" (" + level + ")") : "";
+			return title + ".\nTujuan: " + target.Subject + lv + "\n\nBalas *ya* untuk kirim, atau *batal*.";
+		}
+		return title + ".\nTujuan: " + target.Subject + "\n\n" + body + "\n\nBalas *ya* untuk kirim, atau *batal*.";
+	}
+
+	internal static async Task<string> BuildDmBotStatus(AppConfig config, HttpClient http, int puzzlePoolCount)
+	{
+		bool gatewayOnline = false;
+		bool waConnected = false;
+		try
+		{
+			string gw = await http.GetStringAsync(config.GatewayUrl + "/health");
+			gatewayOnline = true;
+			waConnected = gw.Contains("\"connected\":true");
+		}
+		catch
+		{
+		}
+		return "Brain online.\nGateway " + (gatewayOnline ? "online" : "offline") + ".\nPuzzle pool " + puzzlePoolCount.ToString(CultureInfo.InvariantCulture) + ".\nWA " + (waConnected ? "tersambung" : "belum tersambung") + ".";
+	}
+
+	internal static string BuildAnnouncementDraft(string topic)
+	{
+		string t = (topic ?? "").Trim();
+		if (t.Length == 0)
+		{
+			return "Info liga malam ini. Siapkan diri, cek jadwal, dan main tepat waktu.";
+		}
+		return "Info LCI: " + t.TrimEnd('.') + ". Mohon hadir tepat waktu dan konfirmasi bila berhalangan.";
+	}
+
+	internal static string DefaultAnnouncementTarget(AppConfig config)
+	{
+		string[] targets = config.Relay?.TargetGroups ?? Array.Empty<string>();
+		if (targets.Length > 0 && !string.IsNullOrWhiteSpace(targets[0]))
+		{
+			return targets[0];
+		}
+		return config.AdminSyncGroupJid ?? "";
+	}
+
+	internal static async Task<(string text, List<string> mentions)> ResolveOutgoingMentions(AppConfig config, HttpClient http, string groupJid, string text)
+	{
+		List<string> mentions = new List<string>();
+		List<(string jid, string number, string phone)> members = await FetchGroupMembers(config.GatewayUrl, http, groupJid);
+		string resolved = Regex.Replace(text, "@([A-Za-z0-9]+)", delegate(Match mt)
+		{
+			string tok = mt.Groups[1].Value;
+			string wantPhone = TagAliasStore.Get(tok) ?? "";
+			(string jid, string number, string phone) hit = default((string, string, string));
+			bool found = false;
+			if (wantPhone.Length > 0)
+			{
+				string wp = NumberUtil.Normalize(wantPhone);
+				foreach ((string jid, string number, string phone) mem in members)
+				{
+					if (NumberUtil.Normalize(mem.phone) == wp && mem.jid.Length > 0)
+					{
+						hit = mem;
+						found = true;
+						break;
+					}
+				}
+			}
+			else if (tok.Length >= 3 && tok.All(char.IsDigit))
+			{
+				List<(string jid, string number, string phone)> sfx = members.Where(delegate((string jid, string number, string phone) mem)
+				{
+					string pp = NumberUtil.Normalize(mem.phone);
+					return mem.jid.Length > 0 && pp.Length > 0 && (pp == tok || pp.EndsWith(tok));
+				}).ToList();
+				if (sfx.Count == 1)
+				{
+					hit = sfx[0];
+					found = true;
+				}
+			}
+			if (found)
+			{
+				mentions.Add(hit.jid);
+				return "@" + hit.number;
+			}
+			return mt.Value;
+		});
+		return (resolved, mentions);
+	}
 	internal static List<GroupOption> MatchGroups(List<GroupOption> groups, string name)
 	{
 		List<GroupOption> exact = groups.Where((GroupOption go) => go.Jid.Length > 0 && go.Subject.Equals(name, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -9056,7 +9322,10 @@ internal class BroadcastSession
 
 	public string Text { get; set; } = "";
 
-	public List<GroupOption> Options { get; set; } = new List<GroupOption>();
+			public string Kind { get; set; } = "text";
+
+		public string Level { get; set; } = "";
+public List<GroupOption> Options { get; set; } = new List<GroupOption>();
 
 	public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
