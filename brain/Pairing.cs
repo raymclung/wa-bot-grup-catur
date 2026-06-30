@@ -101,10 +101,14 @@ internal static class PairingCommand
 		if (isTournStart)
 		{
 			List<PairingTournament.TPlayer> tps = new List<PairingTournament.TPlayer>();
+			List<string> skipped = new List<string>();      // alasan tiap pemain dilewati
+			List<string> skippedLids = new List<string>();  // utk tag mereka
 			foreach (MentionPair m in (msg.Mentions ?? Array.Empty<MentionPair>()))
 			{
 				if (string.IsNullOrEmpty(m.Phone))
 				{
+					skipped.Add("@" + m.Lid + " (nomor belum dikenal — minta dia kirim 1 pesan di grup dulu)");
+					skippedLids.Add(m.Lid);
 					continue;
 				}
 				LciClient.LookupResult lu = await LciClient.LookupByPhone(config, http, m.Phone, logger);
@@ -112,10 +116,16 @@ internal static class PairingCommand
 				{
 					tps.Add(new PairingTournament.TPlayer { Handle = lu.Handle, Name = (!string.IsNullOrWhiteSpace(lu.FullName) ? lu.FullName : lu.Handle), Lid = m.Lid, Phone = m.Phone });
 				}
+				else
+				{
+					skipped.Add("@" + m.Lid + " (belum terdaftar/verifikasi LCI — daftar di ligacatur.com/register)");
+					skippedLids.Add(m.Lid);
+				}
 			}
+			string skipNote = (skipped.Count > 0) ? ("\n⚠️ Dilewati:\n• " + string.Join("\n• ", skipped)) : "";
 			if (tps.Count < 2)
 			{
-				await Send(http, outBase, msg.Jid, "Butuh minimal 2 pemain terdaftar & terverifikasi. Tag pemainnya ya.", null, logger);
+				await Send(http, outBase, msg.Jid, "Butuh minimal 2 pemain terdaftar & terverifikasi." + skipNote, (skippedLids.Count > 0 ? skippedLids.ToArray() : null), logger);
 				return "turnamen-need";
 			}
 			int tl;
@@ -131,7 +141,7 @@ internal static class PairingCommand
 			}
 			PairingStandings.Reset(msg.Jid);
 			PairingTournament.StartNew(msg.Jid, tps, tl, ti, rounds);
-			await Send(http, outBase, msg.Jid, "🏆 Turnamen dimulai! " + tps.Count + " pemain · " + rounds + " ronde · G" + (tl / 60) + "+" + ti + " unrated. Klasemen direset.", null, logger);
+			await Send(http, outBase, msg.Jid, "🏆 Turnamen dimulai! " + tps.Count + " pemain · " + rounds + " ronde · G" + (tl / 60) + "+" + ti + " unrated. Klasemen direset." + skipNote, (skippedLids.Count > 0 ? skippedLids.ToArray() : null), logger);
 			PairingTournament.TState? stNew = PairingTournament.Get(msg.Jid);
 			if (stNew != null)
 			{
