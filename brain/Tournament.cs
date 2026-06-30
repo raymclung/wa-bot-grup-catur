@@ -29,10 +29,12 @@ internal static class PairingTournament
 	{
 		public bool Active { get; set; }
 		public int Round { get; set; }
+		public int TotalRounds { get; set; } = 1;
 		public int LimitSec { get; set; } = 300;
 		public int IncSec { get; set; }
 		public List<TPlayer> Players { get; set; } = new List<TPlayer>();
 		public List<string> Played { get; set; } = new List<string>(); // "handleA|handleB" (terurut)
+		public List<string> RoundBulkIds { get; set; } = new List<string>(); // board ronde berjalan (utk auto-lanjut)
 	}
 
 	private static Dictionary<string, TState> Load()
@@ -70,13 +72,30 @@ internal static class PairingTournament
 		}
 	}
 
-	public static void StartNew(string jid, List<TPlayer> players, int limitSec, int incSec)
+	public static void StartNew(string jid, List<TPlayer> players, int limitSec, int incSec, int totalRounds)
 	{
 		lock (_lk)
 		{
 			Dictionary<string, TState> data = Load();
-			data[jid] = new TState { Active = true, Round = 0, LimitSec = limitSec, IncSec = incSec, Players = players, Played = new List<string>() };
+			data[jid] = new TState { Active = true, Round = 0, TotalRounds = totalRounds, LimitSec = limitSec, IncSec = incSec, Players = players, Played = new List<string>(), RoundBulkIds = new List<string>() };
 			Save(data);
+		}
+	}
+
+	// Semua turnamen yang masih aktif (jid -> state). Untuk auto-lanjut ronde.
+	public static Dictionary<string, TState> AllActive()
+	{
+		lock (_lk)
+		{
+			Dictionary<string, TState> result = new Dictionary<string, TState>();
+			foreach (KeyValuePair<string, TState> kv in Load())
+			{
+				if (kv.Value != null && kv.Value.Active)
+				{
+					result[kv.Key] = kv.Value;
+				}
+			}
+			return result;
 		}
 	}
 

@@ -50,6 +50,8 @@ internal static class PairingCommand
 	private static readonly Regex StartRx = new Regex("\\b(start|mulai|jalankan)\\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 	private static readonly Regex CancelRx = new Regex("\\b(cancel|batal|hapus)\\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+	private static readonly Regex RoundsRx = new Regex("(\\d{1,2})\\s*(ronde|babak|round)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
 	// Balik string aksi kalau ditangani (pair/start/cancel/...); null kalau bukan perintah pairing.
 	public static async Task<string?> TryHandle(AppConfig config, HttpClient http, ILogger logger, string outBase, IncomingMessage msg, string senderNum, string senderPhone)
 	{
@@ -119,9 +121,17 @@ internal static class PairingCommand
 			int tl;
 			int ti;
 			ParseTime(t, out tl, out ti);
+			int rounds = 1; // default 1 babak; user bisa override "N ronde"
+			Match rm = RoundsRx.Match(t);
+			if (rm.Success)
+			{
+				rounds = int.Parse(rm.Groups[1].Value);
+				if (rounds < 1) { rounds = 1; }
+				if (rounds > 20) { rounds = 20; }
+			}
 			PairingStandings.Reset(msg.Jid);
-			PairingTournament.StartNew(msg.Jid, tps, tl, ti);
-			await Send(http, outBase, msg.Jid, "🏆 Turnamen dimulai! " + tps.Count + " pemain · G" + (tl / 60) + "+" + ti + " unrated. Klasemen direset.", null, logger);
+			PairingTournament.StartNew(msg.Jid, tps, tl, ti, rounds);
+			await Send(http, outBase, msg.Jid, "🏆 Turnamen dimulai! " + tps.Count + " pemain · " + rounds + " ronde · G" + (tl / 60) + "+" + ti + " unrated. Klasemen direset.", null, logger);
 			PairingTournament.TState? stNew = PairingTournament.Get(msg.Jid);
 			if (stNew != null)
 			{
@@ -699,12 +709,17 @@ internal static class PairingCommand
 				pairs.Add((a, bb));
 			}
 		}
-		StringBuilder sb = new StringBuilder("🏆 Ronde " + newRound + ":\n\n");
+		StringBuilder sb = new StringBuilder("🏆 Ronde " + newRound + "/" + st.TotalRounds + ":\n\n");
 		List<string> tagLids = new List<string>();
+		List<string> roundBulks = new List<string>();
 		foreach (var p in pairs)
 		{
-			string line = await CreateBoardByHandles(config, http, logger, jid, p.w, p.b, st.LimitSec, st.IncSec);
+			(string line, string bulkId) = await CreateBoardByHandles(config, http, logger, jid, p.w, p.b, st.LimitSec, st.IncSec);
 			sb.Append(line + "\n\n");
+			if (bulkId.Length > 0)
+			{
+				roundBulks.Add(bulkId);
+			}
 			st.Played.Add(PairingTournament.PairKey(p.w.Handle, p.b.Handle));
 			if (!string.IsNullOrEmpty(p.w.Lid))
 			{
@@ -717,9 +732,11 @@ internal static class PairingCommand
 		}
 		if (bye != null)
 		{
-			sb.Append("⏸️ " + bye.Name + " dapat BYE ronde ini.\n");
+			PairingStandings.RecordBye(jid, bye.Handle, bye.Name); // bye = +1 poin (Swiss)
+			sb.Append("⏸️ " + bye.Name + " dapat BYE ronde ini (+1 poin).\n");
 		}
 		st.Round = newRound;
+		st.RoundBulkIds = roundBulks;
 		PairingTournament.Update(jid, st);
 		EnsurePoller(config, http, outBase, logger);
 		if (tagLids.Count > 0)
@@ -735,16 +752,74 @@ internal static class PairingCommand
 	}
 
 	// Buat board langsung dari handle (turnamen) + start jam. Balik baris ringkas.
-	private static async Task<string> CreateBoardByHandles(AppConfig config, HttpClient http, ILogger logger, string jid, PairingTournament.TPlayer w, PairingTournament.TPlayer b, int limit, int inc)
+	private static async Task<(string line, string bulkId)> CreateBoardByHandles(AppConfig config, HttpClient http, ILogger logger, string jid, PairingTournament.TPlayer w, PairingTournament.TPlayer b, int limit, int inc)
 	{
 		LciClient.PairResult pr = await LciClient.Pair(config, http, w.Handle, b.Handle, limit, inc, false, config.Lci!.DefaultVariant, logger);
 		if (!pr.Success || pr.Url.Length == 0)
 		{
-			return "⚠️ " + w.Name + " vs " + b.Name + ": gagal. " + Clip(pr.Message);
+			return ("⚠️ " + w.Name + " vs " + b.Name + ": gagal. " + Clip(pr.Message), "");
 		}
 		AddBoard(jid, pr.BulkId, w.Name, b.Name, w.Handle, b.Handle, w.Lid, b.Lid, pr.Url, limit, inc, false);
 		await LciClient.StartClocks(config, http, pr.BulkId, logger); // turnamen: jam langsung jalan
-		return "♟️ " + w.Name + " (P) vs " + b.Name + " (H)\n" + pr.Url;
+		return ("♟️ " + w.Name + " (P) vs " + b.Name + " (H)\n" + pr.Url, pr.BulkId);
+	}
+
+	// Cek tiap turnamen aktif: kalau SEMUA papan ronde berjalan sudah beres -> lanjut ronde
+	// berikutnya; kalau sudah ronde terakhir -> umumkan juara & tutup. Dipanggil dari poller.
+	private static async Task MaybeAdvanceTournaments(AppConfig config, HttpClient http, ILogger logger, string outBase)
+	{
+		Dictionary<string, PairingTournament.TState> actives = PairingTournament.AllActive();
+		foreach (KeyValuePair<string, PairingTournament.TState> kv in actives)
+		{
+			string jid = kv.Key;
+			PairingTournament.TState st = kv.Value;
+			if (st.RoundBulkIds == null || st.RoundBulkIds.Count == 0)
+			{
+				continue; // belum ada papan terlacak (turnamen lama / belum dipasang)
+			}
+			if (!AllBoardsDone(jid, st.RoundBulkIds))
+			{
+				continue; // masih ada game berjalan
+			}
+			if (st.Round >= st.TotalRounds)
+			{
+				await FinishTournament(config, http, outBase, jid, logger);
+			}
+			else
+			{
+				st.RoundBulkIds = new List<string>(); // cegah pemicu dobel sebelum ronde baru dibuat
+				PairingTournament.Update(jid, st);
+				await Send(http, outBase, jid, "✅ Ronde " + st.Round + " selesai! Menyiapkan ronde berikutnya...", null, logger);
+				await RunRound(config, http, logger, outBase, jid, st);
+			}
+		}
+	}
+
+	private static bool AllBoardsDone(string jid, List<string> bulkIds)
+	{
+		lock (_lock)
+		{
+			if (!_boards.TryGetValue(jid, out List<Board>? list) || list == null)
+			{
+				return false;
+			}
+			foreach (string bid in bulkIds)
+			{
+				Board? found = list.Find((Board x) => x.BulkId == bid);
+				if (found == null || !found.Done)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+	}
+
+	private static async Task FinishTournament(AppConfig config, HttpClient http, string outBase, string jid, ILogger logger)
+	{
+		string standings = PairingStandings.Format(jid);
+		PairingTournament.End(jid);
+		await Send(http, outBase, jid, "🏁 Turnamen selesai!\n\n" + standings + "\n\nTerima kasih sudah bertanding! 👏", null, logger);
 	}
 
 	private static void MarkDone(string jid, string bulkId)
@@ -821,6 +896,8 @@ internal static class PairingCommand
 							}
 						}
 					}
+					// Auto-lanjut / akhiri turnamen yang semua papan rondenya sudah beres.
+					await MaybeAdvanceTournaments(config, http, logger, outBase);
 				}
 				catch (Exception ex)
 				{

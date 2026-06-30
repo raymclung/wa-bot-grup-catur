@@ -25,6 +25,12 @@ internal static class PairingStandings
 		public int W { get; set; }
 		public int D { get; set; }
 		public int L { get; set; }
+		public int B { get; set; } // bye (+1 poin masing-masing)
+	}
+
+	private static double Points(Rec r)
+	{
+		return r.W + 0.5 * r.D + r.B;
 	}
 
 	// grup -> handle(lowercase) -> Rec
@@ -102,6 +108,28 @@ internal static class PairingStandings
 		}
 	}
 
+	// Catat BYE: +1 poin untuk pemain (Swiss standar).
+	public static void RecordBye(string jid, string handle, string name)
+	{
+		string key = (handle.Length > 0 ? handle : name).ToLowerInvariant();
+		if (key.Length == 0)
+		{
+			return;
+		}
+		lock (_lk)
+		{
+			Dictionary<string, Dictionary<string, Rec>> data = Load();
+			if (!data.TryGetValue(jid, out Dictionary<string, Rec>? g) || g == null)
+			{
+				g = new Dictionary<string, Rec>();
+				data[jid] = g;
+			}
+			Rec r = GetRec(g, key, name);
+			r.B++;
+			Save(data);
+		}
+	}
+
 	private static Rec GetRec(Dictionary<string, Rec> g, string key, string name)
 	{
 		if (!g.TryGetValue(key, out Rec? r) || r == null)
@@ -129,8 +157,8 @@ internal static class PairingStandings
 			List<Rec> rows = new List<Rec>(g.Values);
 			rows.Sort(delegate (Rec a, Rec b)
 			{
-				double pa = a.W + 0.5 * a.D;
-				double pb = b.W + 0.5 * b.D;
+				double pa = Points(a);
+				double pb = Points(b);
 				if (pb != pa)
 				{
 					return pb.CompareTo(pa);
@@ -141,8 +169,8 @@ internal static class PairingStandings
 			int i = 1;
 			foreach (Rec r in rows)
 			{
-				double pts = r.W + 0.5 * r.D;
-				sb.Append(i + ". " + r.Name + " — " + Pts(pts) + " poin (" + r.W + "M/" + r.D + "S/" + r.L + "K)\n");
+				string byeTxt = (r.B > 0) ? ("/" + r.B + "B") : "";
+				sb.Append(i + ". " + r.Name + " — " + Pts(Points(r)) + " poin (" + r.W + "M/" + r.D + "S/" + r.L + "K" + byeTxt + ")\n");
 				i++;
 			}
 			return sb.ToString().TrimEnd();
@@ -168,8 +196,8 @@ internal static class PairingStandings
 			List<KeyValuePair<string, Rec>> rows = new List<KeyValuePair<string, Rec>>(g);
 			rows.Sort(delegate (KeyValuePair<string, Rec> a, KeyValuePair<string, Rec> b)
 			{
-				double pa = a.Value.W + 0.5 * a.Value.D;
-				double pb = b.Value.W + 0.5 * b.Value.D;
+				double pa = Points(a.Value);
+				double pb = Points(b.Value);
 				if (pb != pa)
 				{
 					return pb.CompareTo(pa);
@@ -191,8 +219,8 @@ internal static class PairingStandings
 			{
 				return shown + ": belum ada hasil tercatat.";
 			}
-			double pts = me.W + 0.5 * me.D;
-			return "📊 " + me.Name + "\nPeringkat #" + rank + " dari " + rows.Count + "\n" + Pts(pts) + " poin — " + me.W + " menang, " + me.D + " seri, " + me.L + " kalah";
+			string byeInfo = (me.B > 0) ? (", " + me.B + " bye") : "";
+			return "📊 " + me.Name + "\nPeringkat #" + rank + " dari " + rows.Count + "\n" + Pts(Points(me)) + " poin — " + me.W + " menang, " + me.D + " seri, " + me.L + " kalah" + byeInfo;
 		}
 	}
 
@@ -205,7 +233,7 @@ internal static class PairingStandings
 			if (data.TryGetValue(jid, out Dictionary<string, Rec>? g) && g != null
 				&& g.TryGetValue(key.ToLowerInvariant(), out Rec? r) && r != null)
 			{
-				return r.W + 0.5 * r.D;
+				return Points(r);
 			}
 			return 0.0;
 		}
