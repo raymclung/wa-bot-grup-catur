@@ -261,6 +261,36 @@ static class ChessAnalysis
         return new Output(text, fen);
     }
 
+    // Versi "TANPA BOCOR" untuk jawaban-salah puzzle di GRUP yang masih aktif: tunjukkan eval langkah pemain +
+    // dorong cari yang lebih memaksa, TAPI tak pernah menyebut langkah terbaik/solusi (puzzle tetap utuh untuk yang
+    // lain). Engine-only, TANPA AI -> mustahil membocorkan. Codex: panggil ini di handler jawaban-salah puzzle grup.
+    public static async Task<string?> CritiqueSafe(string fen, string userMove)
+    {
+        if (!StockfishEngine.Available) return null;
+        bool whiteToMove = fen.Contains(" w ");
+        string who = whiteToMove ? "Putih" : "Hitam";
+        var best = await Task.Run(() => StockfishEngine.Analyze(fen));
+        if (best is null) return null;
+        ChessBoard b;
+        try { b = ChessBoard.LoadFromFen(fen); } catch { return null; }
+        Move chosen = default; bool found = false;
+        string nu = NormSan(userMove);
+        try { foreach (var m in b.Moves()) { if (NormSan(m.San) == nu) { chosen = m; found = true; break; } } } catch { }
+        if (!found) return null;                       // langkah tak legal -> biar hint biasa yang jalan
+        string userSan = chosen.San;
+        b.Move(chosen);
+        var after = await Task.Run(() => StockfishEngine.Analyze(b.ToFen()));
+        int Cp(StockfishEngine.Result r) => r.ScoreType == "mate" ? (r.ScoreVal > 0 ? 100000 : -100000) : r.ScoreVal;
+        int bestCp = Cp(best);
+        int userCp = after != null ? -Cp(after) : 0;   // sudut pandang pemain
+        string userEval = after != null ? EvalText(after.ScoreType, -after.ScoreVal, who) : "?";
+        bool muchBetter = (bestCp - userCp) >= 150;     // ada langkah >= 1.5 pion lebih kuat
+        return $"\U0001F50D Langkahmu *{userSan}*: eval {userEval}.\n" +
+               (muchBetter
+                   ? "Di posisi ini ada langkah yang jauh lebih kuat \u2014 cari yang memaksa: skak, tangkapan, atau ancaman."
+                   : "Lumayan, tapi belum yang paling tepat. Coba langkah yang lebih memaksa.");
+    }
+
     static bool LooksLikeMove(string s)
     {
         if (string.IsNullOrEmpty(s)) return false;
