@@ -966,6 +966,20 @@ function startServer() {
     }
   });
 
+  // Brain meminta pesan terakhir non-bot di grup untuk aksi admin yang dikonfirmasi.
+  app.get('/last-message', async (req, res) => {
+    const jid = req.query.jid;
+    if (!jid) return res.status(400).json({ ok: false, error: 'jid wajib' });
+    let found = null;
+    for (const m of Array.from(msgCache.values()).reverse()) {
+      if (!m || !m.key || m.key.remoteJid !== jid || m.key.fromMe) continue;
+      const text = extractText(m) || (mediaInfo(m).type ? `[${mediaInfo(m).type}]` : '');
+      found = { key: m.key, id: m.key.id || '', who: chatWho(m), text };
+      break;
+    }
+    if (!found) return res.status(404).json({ ok: false, error: 'pesan terakhir tidak ada di cache' });
+    res.json({ ok: true, message: found });
+  });
   // Brain memerintahkan hapus pesan (butuh bot = admin grup).
   app.post('/delete', async (req, res) => {
     let { jid, key } = req.body || {};
