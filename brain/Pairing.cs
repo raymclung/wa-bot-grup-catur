@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -56,6 +57,8 @@ internal static class PairingCommand
 		{
 			return null;
 		}
+		try
+		{
 		string t = (msg.Text ?? "").ToLowerInvariant();
 		string bulkArg = ExtractBulkId(msg.Text ?? "");
 		bool isPair = t.Contains("pair") || t.Contains("pasang");
@@ -479,6 +482,28 @@ internal static class PairingCommand
 		string body = "♟️ Board siap! " + wName + " (putih) vs " + bName + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + Invite(pr.Url) + startedTxt + "\nBulkID: " + pr.BulkId + (startNow ? "" : ("\nMulai jam: @bot start " + pr.BulkId)) + "  ·  Batal: @bot cancel " + pr.BulkId + "\nMain yuk @" + wp.Lid + " @" + bp.Lid + "!";
 		await Send(http, outBase, msg.Jid, body, new string[2] { wp.Lid, bp.Lid }, logger);
 		return "pair";
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning("PairingCommand error: {Msg}", ex.Message);
+			try
+			{
+				string dir = Path.Combine(Directory.GetCurrentDirectory(), "data");
+				Directory.CreateDirectory(dir);
+				File.AppendAllText(Path.Combine(dir, "pairing-errors.txt"), DateTime.UtcNow.ToString("o") + "\n" + ex + "\n\n");
+			}
+			catch
+			{
+			}
+			try
+			{
+				await Send(http, outBase, msg.Jid, "Aduh, ada error saat proses perintah pairing. Sudah aku catat, coba lagi ya. 🙏", null, logger);
+			}
+			catch
+			{
+			}
+			return "pair-error";
+		}
 	}
 
 	private static void ParseTime(string t, out int limitSec, out int incSec)
