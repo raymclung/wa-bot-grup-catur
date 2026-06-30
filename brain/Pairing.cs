@@ -28,6 +28,8 @@ internal static class PairingCommand
 		public string Black = "";
 		public string WhiteHandle = ""; // handle Lichess (buat rematch + klasemen)
 		public string BlackHandle = "";
+		public string WhiteLid = "";    // LID WA (buat tag/notif saat rematch)
+		public string BlackLid = "";
 		public string Url = "";
 		public int LimitSec;            // time control (buat rematch)
 		public int IncSec;
@@ -64,8 +66,10 @@ internal static class PairingCommand
 		bool isBoards = !isPair && (t.Contains("boards") || t.Contains("daftar board") || t.Contains("papan aktif"));
 		bool isHelp = !isPair && (t.Contains("bantuan") || t.Contains("help") || t.Contains("perintah pairing"));
 		bool isRematch = !isPair && (t.Contains("rematch") || t.Contains("tukar warna") || t.Contains("main lagi"));
-		bool isKlasemen = !isPair && (t.Contains("klasemen") || t.Contains("standings"));
-		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards && !isHelp && !isRematch && !isKlasemen)
+		bool isReset = !isPair && t.Contains("reset") && (t.Contains("klasemen") || t.Contains("standings") || t.Contains("musim"));
+		bool isStats = !isPair && (t.Contains("statistik") || t.Contains("rekap") || t.Contains("stats"));
+		bool isKlasemen = !isPair && !isReset && (t.Contains("klasemen") || t.Contains("standings"));
+		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards && !isHelp && !isRematch && !isKlasemen && !isReset && !isStats)
 		{
 			return null;
 		}
@@ -117,6 +121,8 @@ internal static class PairingCommand
 				+ "• @bot hasil [BulkID] — cek skor\n"
 				+ "• @bot boards — daftar board aktif\n"
 				+ "• @bot klasemen — tabel menang/seri/kalah\n"
+				+ "• @bot statistik @A — rekap pribadi pemain\n"
+				+ "• @bot reset klasemen — mulai musim baru\n"
 				+ "• @bot info @A — info pemain (handle Lichess, verifikasi)";
 			await Send(http, outBase, msg.Jid, help, null, logger);
 			return "help";
@@ -127,6 +133,42 @@ internal static class PairingCommand
 		{
 			await Send(http, outBase, msg.Jid, PairingStandings.Format(msg.Jid), null, logger);
 			return "klasemen";
+		}
+
+		// ===== RESET KLASEMEN =====  @bot reset klasemen  -> mulai musim baru
+		if (isReset)
+		{
+			bool okReset = PairingStandings.Reset(msg.Jid);
+			await Send(http, outBase, msg.Jid, okReset ? "Klasemen grup ini direset. Musim baru dimulai! 🆕" : "Klasemen masih kosong, tidak ada yang direset.", null, logger);
+			return "klasemen-reset";
+		}
+
+		// ===== STATISTIK =====  @bot statistik @A  -> rekap pribadi pemain
+		if (isStats)
+		{
+			MentionPair? who = null;
+			foreach (MentionPair m in (msg.Mentions ?? Array.Empty<MentionPair>()))
+			{
+				if (!string.IsNullOrEmpty(m.Phone))
+				{
+					who = m;
+					break;
+				}
+			}
+			if (who == null)
+			{
+				await Send(http, outBase, msg.Jid, "Tag pemainnya. Contoh: @bot statistik @NamaPemain", null, logger);
+				return "stats-need";
+			}
+			LciClient.LookupResult ls = await LciClient.LookupByPhone(config, http, who.Phone, logger);
+			if (!ls.Found || ls.Handle.Length == 0)
+			{
+				await Send(http, outBase, msg.Jid, "@" + who.Lid + " belum terdaftar di LCI.", new string[1] { who.Lid }, logger);
+				return "stats-unreg";
+			}
+			string snm = (!string.IsNullOrWhiteSpace(ls.FullName) ? ls.FullName : ls.Handle);
+			await Send(http, outBase, msg.Jid, PairingStandings.FormatPlayer(msg.Jid, ls.Handle, snm), null, logger);
+			return "stats";
 		}
 
 		// ===== REMATCH =====  @bot rematch  -> pasangkan ulang 2 pemain terakhir, warna ditukar
@@ -145,11 +187,29 @@ internal static class PairingCommand
 				await Send(http, outBase, msg.Jid, "Gagal rematch. " + Clip(prr.Message), null, logger);
 				return "rematch-fail";
 			}
-			AddBoard(msg.Jid, prr.BulkId, last.Black, last.White, last.BlackHandle, last.WhiteHandle, prr.Url, last.LimitSec, last.IncSec, last.Rated);
+			AddBoard(msg.Jid, prr.BulkId, last.Black, last.White, last.BlackHandle, last.WhiteHandle, last.BlackLid, last.WhiteLid, prr.Url, last.LimitSec, last.IncSec, last.Rated);
 			EnsurePoller(config, http, outBase, logger);
 			int rmins = last.LimitSec / 60;
-			string rbody = "♟️ Rematch! " + last.Black + " (putih) vs " + last.White + " (hitam) · G" + rmins + "+" + last.IncSec + " " + (last.Rated ? "rated" : "unrated") + "\n" + Invite(prr.Url) + "\nBulkID: " + prr.BulkId + "\nMulai jam: @bot start " + prr.BulkId + "  ·  Batal: @bot cancel " + prr.BulkId;
-			await Send(http, outBase, msg.Jid, rbody, null, logger);
+			List<string> rtags = new List<string>();
+			if (last.BlackLid.Length > 0)
+			{
+				rtags.Add(last.BlackLid);
+			}
+			if (last.WhiteLid.Length > 0)
+			{
+				rtags.Add(last.WhiteLid);
+			}
+			string rtagLine = "";
+			foreach (string l in rtags)
+			{
+				rtagLine += " @" + l;
+			}
+			if (rtagLine.Length > 0)
+			{
+				rtagLine = "\nMain yuk" + rtagLine + "!";
+			}
+			string rbody = "♟️ Rematch! " + last.Black + " (putih) vs " + last.White + " (hitam) · G" + rmins + "+" + last.IncSec + " " + (last.Rated ? "rated" : "unrated") + "\n" + Invite(prr.Url) + "\nBulkID: " + prr.BulkId + "\nMulai jam: @bot start " + prr.BulkId + "  ·  Batal: @bot cancel " + prr.BulkId + rtagLine;
+			await Send(http, outBase, msg.Jid, rbody, rtags.ToArray(), logger);
 			return "rematch";
 		}
 
@@ -273,6 +333,7 @@ internal static class PairingCommand
 		if (players.Count > 2)
 		{
 			StringBuilder mb = new StringBuilder();
+			List<string> tagLids = new List<string>();
 			int made = 0;
 			for (int i = 0; i + 1 < players.Count; i += 2)
 			{
@@ -281,11 +342,22 @@ internal static class PairingCommand
 				if (line.StartsWith("♟️"))
 				{
 					made++;
+					tagLids.Add(players[i].Lid);
+					tagLids.Add(players[i + 1].Lid);
 				}
 			}
 			EnsurePoller(config, http, outBase, logger);
 			mb.Append(made + " board dibuat.");
-			await Send(http, outBase, msg.Jid, mb.ToString().TrimEnd(), null, logger);
+			if (tagLids.Count > 0)
+			{
+				mb.Append("\nMain yuk");
+				foreach (string l in tagLids)
+				{
+					mb.Append(" @" + l);
+				}
+				mb.Append("!");
+			}
+			await Send(http, outBase, msg.Jid, mb.ToString().TrimEnd(), tagLids.ToArray(), logger);
 			return "pair-multi";
 		}
 
@@ -314,7 +386,7 @@ internal static class PairingCommand
 		int mins = limit / 60;
 		string wName = (!string.IsNullOrWhiteSpace(lw.FullName) ? lw.FullName : (lw.Handle.Length > 0 ? lw.Handle : ("@" + wp.Lid)));
 		string bName = (!string.IsNullOrWhiteSpace(lb.FullName) ? lb.FullName : (lb.Handle.Length > 0 ? lb.Handle : ("@" + bp.Lid)));
-		AddBoard(msg.Jid, pr.BulkId, wName, bName, lw.Handle, lb.Handle, pr.Url, limit, inc, rated);
+		AddBoard(msg.Jid, pr.BulkId, wName, bName, lw.Handle, lb.Handle, wp.Lid, bp.Lid, pr.Url, limit, inc, rated);
 		EnsurePoller(config, http, outBase, logger); // mulai pemantau hasil (auto-umumkan saat game kelar)
 		string startedTxt = "";
 		if (startNow)
@@ -323,8 +395,9 @@ internal static class PairingCommand
 			startedTxt = sc.Success ? "\n⏱️ Jam langsung dimulai. Gas!" : "";
 		}
 		// Plain text (tanpa italic/markdown) supaya gampang di-copy. Nama lengkap dari LCI (full_name).
-		string body = "♟️ Board siap! " + wName + " (putih) vs " + bName + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + Invite(pr.Url) + startedTxt + "\nBulkID: " + pr.BulkId + (startNow ? "" : ("\nMulai jam: @bot start " + pr.BulkId)) + "  ·  Batal: @bot cancel " + pr.BulkId;
-		await Send(http, outBase, msg.Jid, body, null, logger);
+		// Tag kedua pemain di baris terakhir -> mereka dapat notifikasi (link tetap bersih di tengah).
+		string body = "♟️ Board siap! " + wName + " (putih) vs " + bName + " (hitam) · G" + mins + "+" + inc + " " + ratedTxt + "\n" + Invite(pr.Url) + startedTxt + "\nBulkID: " + pr.BulkId + (startNow ? "" : ("\nMulai jam: @bot start " + pr.BulkId)) + "  ·  Batal: @bot cancel " + pr.BulkId + "\nMain yuk @" + wp.Lid + " @" + bp.Lid + "!";
+		await Send(http, outBase, msg.Jid, body, new string[2] { wp.Lid, bp.Lid }, logger);
 		return "pair";
 	}
 
@@ -413,7 +486,7 @@ internal static class PairingCommand
 		}
 	}
 
-	private static void AddBoard(string jid, string bulkId, string white, string black, string whiteHandle, string blackHandle, string url, int limitSec, int incSec, bool rated)
+	private static void AddBoard(string jid, string bulkId, string white, string black, string whiteHandle, string blackHandle, string whiteLid, string blackLid, string url, int limitSec, int incSec, bool rated)
 	{
 		if (string.IsNullOrEmpty(bulkId))
 		{
@@ -426,7 +499,7 @@ internal static class PairingCommand
 				list = new List<Board>();
 				_boards[jid] = list;
 			}
-			list.Add(new Board { BulkId = bulkId, White = white, Black = black, WhiteHandle = whiteHandle, BlackHandle = blackHandle, Url = url, LimitSec = limitSec, IncSec = incSec, Rated = rated });
+			list.Add(new Board { BulkId = bulkId, White = white, Black = black, WhiteHandle = whiteHandle, BlackHandle = blackHandle, WhiteLid = whiteLid, BlackLid = blackLid, Url = url, LimitSec = limitSec, IncSec = incSec, Rated = rated });
 		}
 	}
 
@@ -462,7 +535,7 @@ internal static class PairingCommand
 		}
 		string wName = (!string.IsNullOrWhiteSpace(lw.FullName) ? lw.FullName : lw.Handle);
 		string bName = (!string.IsNullOrWhiteSpace(lb.FullName) ? lb.FullName : lb.Handle);
-		AddBoard(jid, pr.BulkId, wName, bName, lw.Handle, lb.Handle, pr.Url, limit, inc, rated);
+		AddBoard(jid, pr.BulkId, wName, bName, lw.Handle, lb.Handle, wp.Lid, bp.Lid, pr.Url, limit, inc, rated);
 		if (startNow)
 		{
 			await LciClient.StartClocks(config, http, pr.BulkId, logger);

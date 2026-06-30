@@ -153,4 +153,61 @@ internal static class PairingStandings
 	{
 		return (p == Math.Floor(p)) ? ((int)p).ToString() : p.ToString("0.0", CultureInfo.InvariantCulture);
 	}
+
+	// Statistik 1 pemain (peringkat + M/S/K). key = handle Lichess (lowercase).
+	public static string FormatPlayer(string jid, string key, string displayName)
+	{
+		string shown = (displayName.Length > 0) ? displayName : key;
+		lock (_lk)
+		{
+			Dictionary<string, Dictionary<string, Rec>> data = Load();
+			if (!data.TryGetValue(jid, out Dictionary<string, Rec>? g) || g == null || g.Count == 0)
+			{
+				return shown + ": belum ada hasil tercatat.";
+			}
+			List<KeyValuePair<string, Rec>> rows = new List<KeyValuePair<string, Rec>>(g);
+			rows.Sort(delegate (KeyValuePair<string, Rec> a, KeyValuePair<string, Rec> b)
+			{
+				double pa = a.Value.W + 0.5 * a.Value.D;
+				double pb = b.Value.W + 0.5 * b.Value.D;
+				if (pb != pa)
+				{
+					return pb.CompareTo(pa);
+				}
+				return b.Value.W.CompareTo(a.Value.W);
+			});
+			int rank = 0;
+			Rec? me = null;
+			for (int i = 0; i < rows.Count; i++)
+			{
+				if (rows[i].Key == key.ToLowerInvariant())
+				{
+					rank = i + 1;
+					me = rows[i].Value;
+					break;
+				}
+			}
+			if (me == null)
+			{
+				return shown + ": belum ada hasil tercatat.";
+			}
+			double pts = me.W + 0.5 * me.D;
+			return "📊 " + me.Name + "\nPeringkat #" + rank + " dari " + rows.Count + "\n" + Pts(pts) + " poin — " + me.W + " menang, " + me.D + " seri, " + me.L + " kalah";
+		}
+	}
+
+	// Reset klasemen 1 grup (mulai musim baru). true kalau ada yang dihapus.
+	public static bool Reset(string jid)
+	{
+		lock (_lk)
+		{
+			Dictionary<string, Dictionary<string, Rec>> data = Load();
+			if (data.Remove(jid))
+			{
+				Save(data);
+				return true;
+			}
+			return false;
+		}
+	}
 }
