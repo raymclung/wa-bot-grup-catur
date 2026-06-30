@@ -24,9 +24,13 @@ internal static class PairingCommand
 	private sealed class Board
 	{
 		public string BulkId = "";
-		public string White = "";
+		public string White = "";       // nama tampilan
 		public string Black = "";
+		public string WhiteHandle = ""; // handle Lichess (buat rematch + klasemen)
+		public string BlackHandle = "";
 		public string Url = "";
+		public int LimitSec;            // time control (buat rematch)
+		public int IncSec;
 		public bool Rated;
 		public bool Done;   // selesai+diumumkan ATAU dibatalkan -> berhenti dipantau
 		public int Polls;
@@ -58,7 +62,10 @@ internal static class PairingCommand
 		bool isInfo = !isPair && (t.Contains("info") || t.Contains("profil"));
 		bool isResult = !isPair && (t.Contains("hasil") || t.Contains("result") || t.Contains("skor") || t.Contains("score"));
 		bool isBoards = !isPair && (t.Contains("boards") || t.Contains("daftar board") || t.Contains("papan aktif"));
-		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards)
+		bool isHelp = !isPair && (t.Contains("bantuan") || t.Contains("help") || t.Contains("perintah pairing"));
+		bool isRematch = !isPair && (t.Contains("rematch") || t.Contains("tukar warna") || t.Contains("main lagi"));
+		bool isKlasemen = !isPair && (t.Contains("klasemen") || t.Contains("standings"));
+		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards && !isHelp && !isRematch && !isKlasemen)
 		{
 			return null;
 		}
@@ -95,6 +102,55 @@ internal static class PairingCommand
 			LciClient.ActionResult ar2 = await LciClient.StartClocks(config, http, bulkS, logger);
 			await Send(http, outBase, msg.Jid, ar2.Success ? "⏱️ Jam dimulai. Selamat bertanding!" : ("Gagal mulai jam. " + Clip(ar2.Message)), null, logger);
 			return "pair-start";
+		}
+
+		// ===== BANTUAN =====  @bot bantuan  -> daftar perintah pairing
+		if (isHelp)
+		{
+			string help = "Perintah pairing (admin):\n"
+				+ "• @bot pair @A vs @B [unrated|rated] G5+1 — buat board\n"
+				+ "   tambah 'mulai'/'gas' untuk langsung start jam\n"
+				+ "   tag 4+ pemain = banyak board sekaligus (A-B, C-D)\n"
+				+ "• @bot start [BulkID] — mulai jam board terakhir\n"
+				+ "• @bot cancel [BulkID] — batalkan board\n"
+				+ "• @bot rematch — ulang 2 pemain terakhir (warna ditukar)\n"
+				+ "• @bot hasil [BulkID] — cek skor\n"
+				+ "• @bot boards — daftar board aktif\n"
+				+ "• @bot klasemen — tabel menang/seri/kalah\n"
+				+ "• @bot info @A — info pemain (handle Lichess, verifikasi)";
+			await Send(http, outBase, msg.Jid, help, null, logger);
+			return "help";
+		}
+
+		// ===== KLASEMEN =====  @bot klasemen  -> tabel M/S/K + poin
+		if (isKlasemen)
+		{
+			await Send(http, outBase, msg.Jid, PairingStandings.Format(msg.Jid), null, logger);
+			return "klasemen";
+		}
+
+		// ===== REMATCH =====  @bot rematch  -> pasangkan ulang 2 pemain terakhir, warna ditukar
+		if (isRematch)
+		{
+			Board? last = GetLastBoard(msg.Jid);
+			if (last == null || last.WhiteHandle.Length == 0 || last.BlackHandle.Length == 0)
+			{
+				await Send(http, outBase, msg.Jid, "Belum ada board untuk di-rematch. Buat dulu: @bot pair @A vs @B G5+1", null, logger);
+				return "rematch-none";
+			}
+			// Tukar warna: putih baru = hitam lama.
+			LciClient.PairResult prr = await LciClient.Pair(config, http, last.BlackHandle, last.WhiteHandle, last.LimitSec, last.IncSec, last.Rated, config.Lci.DefaultVariant, logger);
+			if (!prr.Success || prr.Url.Length == 0)
+			{
+				await Send(http, outBase, msg.Jid, "Gagal rematch. " + Clip(prr.Message), null, logger);
+				return "rematch-fail";
+			}
+			AddBoard(msg.Jid, prr.BulkId, last.Black, last.White, last.BlackHandle, last.WhiteHandle, prr.Url, last.LimitSec, last.IncSec, last.Rated);
+			EnsurePoller(config, http, outBase, logger);
+			int rmins = last.LimitSec / 60;
+			string rbody = "♟️ Rematch! " + last.Black + " (putih) vs " + last.White + " (hitam) · G" + rmins + "+" + last.IncSec + " " + (last.Rated ? "rated" : "unrated") + "\n" + Invite(prr.Url) + "\nBulkID: " + prr.BulkId + "\nMulai jam: @bot start " + prr.BulkId + "  ·  Batal: @bot cancel " + prr.BulkId;
+			await Send(http, outBase, msg.Jid, rbody, null, logger);
+			return "rematch";
 		}
 
 		// ===== HASIL =====  @bot hasil [<BulkID>]  -> skor game (board terakhir kalau ID tak disebut)
@@ -199,8 +255,6 @@ internal static class PairingCommand
 			await Send(http, outBase, msg.Jid, "Tag 2 pemain ya (yang nomornya terdaftar). Contoh: @bot pair @A vs @B unrated G5+1", null, logger);
 			return "pair-need-2";
 		}
-		MentionPair wp = players[0];
-		MentionPair bp = players[1];
 		int limit;
 		int inc;
 		ParseTime(t, out limit, out inc);
@@ -213,7 +267,31 @@ internal static class PairingCommand
 		{
 			rated = true;
 		}
+		bool startNow = t.Contains("mulai") || t.Contains("langsung") || t.Contains("sekaligus") || t.Contains("gas") || t.Contains(" now");
 
+		// Banyak pemain (4, 6, ...) -> beberapa board sekaligus (pasangan berurutan A-B, C-D, ...).
+		if (players.Count > 2)
+		{
+			StringBuilder mb = new StringBuilder();
+			int made = 0;
+			for (int i = 0; i + 1 < players.Count; i += 2)
+			{
+				string line = await CreateBoardLine(config, http, logger, msg.Jid, players[i], players[i + 1], limit, inc, rated, startNow);
+				mb.Append(line + "\n\n");
+				if (line.StartsWith("♟️"))
+				{
+					made++;
+				}
+			}
+			EnsurePoller(config, http, outBase, logger);
+			mb.Append(made + " board dibuat.");
+			await Send(http, outBase, msg.Jid, mb.ToString().TrimEnd(), null, logger);
+			return "pair-multi";
+		}
+
+		// Satu pasangan -> balasan lengkap (ajakan + tag kalau pemain belum terdaftar).
+		MentionPair wp = players[0];
+		MentionPair bp = players[1];
 		LciClient.LookupResult lw = await LciClient.LookupByPhone(config, http, wp.Phone, logger);
 		if (!lw.Found || !lw.Verified || lw.Handle.Length == 0)
 		{
@@ -236,10 +314,8 @@ internal static class PairingCommand
 		int mins = limit / 60;
 		string wName = (!string.IsNullOrWhiteSpace(lw.FullName) ? lw.FullName : (lw.Handle.Length > 0 ? lw.Handle : ("@" + wp.Lid)));
 		string bName = (!string.IsNullOrWhiteSpace(lb.FullName) ? lb.FullName : (lb.Handle.Length > 0 ? lb.Handle : ("@" + bp.Lid)));
-		AddBoard(msg.Jid, pr.BulkId, wName, bName, pr.Url, rated);
+		AddBoard(msg.Jid, pr.BulkId, wName, bName, lw.Handle, lb.Handle, pr.Url, limit, inc, rated);
 		EnsurePoller(config, http, outBase, logger); // mulai pemantau hasil (auto-umumkan saat game kelar)
-		// Pair + langsung mulai jam kalau diminta ("mulai"/"langsung"/"sekaligus"/"gas").
-		bool startNow = t.Contains("mulai") || t.Contains("langsung") || t.Contains("sekaligus") || t.Contains("gas") || t.Contains(" now");
 		string startedTxt = "";
 		if (startNow)
 		{
@@ -337,7 +413,7 @@ internal static class PairingCommand
 		}
 	}
 
-	private static void AddBoard(string jid, string bulkId, string white, string black, string url, bool rated)
+	private static void AddBoard(string jid, string bulkId, string white, string black, string whiteHandle, string blackHandle, string url, int limitSec, int incSec, bool rated)
 	{
 		if (string.IsNullOrEmpty(bulkId))
 		{
@@ -350,8 +426,48 @@ internal static class PairingCommand
 				list = new List<Board>();
 				_boards[jid] = list;
 			}
-			list.Add(new Board { BulkId = bulkId, White = white, Black = black, Url = url, Rated = rated });
+			list.Add(new Board { BulkId = bulkId, White = white, Black = black, WhiteHandle = whiteHandle, BlackHandle = blackHandle, Url = url, LimitSec = limitSec, IncSec = incSec, Rated = rated });
 		}
+	}
+
+	private static Board? GetLastBoard(string jid)
+	{
+		lock (_lock)
+		{
+			if (_boards.TryGetValue(jid, out List<Board>? list) && list != null && list.Count > 0)
+			{
+				return list[list.Count - 1];
+			}
+			return null;
+		}
+	}
+
+	// Buat satu board untuk multi-pair; balik baris ringkas (diawali ♟️ jika sukses, ⚠️ jika gagal).
+	private static async Task<string> CreateBoardLine(AppConfig config, HttpClient http, ILogger logger, string jid, MentionPair wp, MentionPair bp, int limit, int inc, bool rated, bool startNow)
+	{
+		LciClient.LookupResult lw = await LciClient.LookupByPhone(config, http, wp.Phone, logger);
+		if (!lw.Found || !lw.Verified || lw.Handle.Length == 0)
+		{
+			return "⚠️ @" + wp.Lid + " (putih) belum terdaftar/terverifikasi.";
+		}
+		LciClient.LookupResult lb = await LciClient.LookupByPhone(config, http, bp.Phone, logger);
+		if (!lb.Found || !lb.Verified || lb.Handle.Length == 0)
+		{
+			return "⚠️ @" + bp.Lid + " (hitam) belum terdaftar/terverifikasi.";
+		}
+		LciClient.PairResult pr = await LciClient.Pair(config, http, lw.Handle, lb.Handle, limit, inc, rated, config.Lci!.DefaultVariant, logger);
+		if (!pr.Success || pr.Url.Length == 0)
+		{
+			return "⚠️ Gagal buat board. " + Clip(pr.Message);
+		}
+		string wName = (!string.IsNullOrWhiteSpace(lw.FullName) ? lw.FullName : lw.Handle);
+		string bName = (!string.IsNullOrWhiteSpace(lb.FullName) ? lb.FullName : lb.Handle);
+		AddBoard(jid, pr.BulkId, wName, bName, lw.Handle, lb.Handle, pr.Url, limit, inc, rated);
+		if (startNow)
+		{
+			await LciClient.StartClocks(config, http, pr.BulkId, logger);
+		}
+		return "♟️ " + wName + " (putih) vs " + bName + " (hitam)\n" + pr.Url + "\nBulkID: " + pr.BulkId;
 	}
 
 	private static void MarkDone(string jid, string bulkId)
@@ -414,7 +530,11 @@ internal static class PairingCommand
 							{
 								b.Done = true;
 							}
-							await Send(http, outBase, jid, "♟️ Hasil: " + ri.Summary, null, logger);
+							if (ri.Games.Count > 0)
+							{
+								PairingStandings.Record(jid, b.WhiteHandle, b.White, b.BlackHandle, b.Black, ri.Games[0].Score);
+							}
+							await Send(http, outBase, jid, "♟️ Hasil: " + ri.Summary + "\nKetik @bot klasemen untuk peringkat.", null, logger);
 						}
 						else if (b.Polls > 240) // ~3 jam tak selesai -> berhenti pantau
 						{
