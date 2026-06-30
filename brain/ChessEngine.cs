@@ -97,6 +97,19 @@ static class ChessAnalysis
         if (input.Length == 0)
             return new Output("Kirim posisi dalam *FEN* atau jalannya game dalam *PGN* setelah perintah. Contoh:\n`!analisa rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1`", "");
 
+        // "Langkah fokus" di belakang FEN (mis. "<FEN> Qd6" / "<FEN> kenapa Qd6") -> kritik langkah itu vs terbaik.
+        string? focusMove = null;
+        if (LooksLikeFen(input))
+        {
+            var toks = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (toks.Length > 6)
+            {
+                for (int i = 6; i < toks.Length; i++)
+                    if (LooksLikeMove(toks[i])) { focusMove = toks[i]; break; }
+                if (focusMove != null) input = string.Join(" ", toks.Take(6));
+            }
+        }
+
         string fen;
         try
         {
@@ -107,6 +120,9 @@ static class ChessAnalysis
         {
             return new Output("Maaf, posisinya tak terbaca. Pastikan *FEN* valid atau *PGN* benar.", "");
         }
+
+        if (focusMove != null)
+            return await Critique(fen, focusMove, ai, http, logger);
 
         if (!StockfishEngine.Available)
             return new Output("Engine analisa belum siap di server.", fen);
@@ -187,6 +203,79 @@ static class ChessAnalysis
         }
         catch { return null; }
     }
+
+    // Kritik satu langkah spesifik vs langkah terbaik engine (grounded Stockfish, anti-ngarang).
+    public static async Task<Output?> Critique(string fen, string userMove, AiConfig? ai, HttpClient http, ILogger logger)
+    {
+        if (!StockfishEngine.Available)
+            return new Output("Engine analisa belum siap di server.", fen);
+        bool whiteToMove = fen.Contains(" w ");
+        string who = whiteToMove ? "Putih" : "Hitam";
+
+        var best = await Task.Run(() => StockfishEngine.Analyze(fen));
+        if (best is null) return new Output("Engine tak merespons. Coba lagi sebentar ya.", fen);
+        string bestSan = UciToSan(ChessBoard.LoadFromFen(fen), best.Best) ?? Coord(best.Best);
+        string bestEval = EvalText(best.ScoreType, best.ScoreVal, who);
+
+        ChessBoard b;
+        try { b = ChessBoard.LoadFromFen(fen); } catch { return new Output("Posisi tak terbaca.", ""); }
+        Move chosen = default;
+        bool found = false;
+        string nu = NormSan(userMove);
+        try { foreach (var m in b.Moves()) { if (NormSan(m.San) == nu) { chosen = m; found = true; break; } } } catch { }
+        if (!found)
+            return new Output($"Langkah *{userMove}* sepertinya tak legal/tak dikenali di posisi ini. Cek lagi ya.\n(Langkah terbaik: *{bestSan}*, eval {bestEval})", fen);
+
+        string userSan = chosen.San;
+        bool isBest = NormSan(userSan) == NormSan(bestSan);
+        b.Move(chosen);
+        string afterFen = b.ToFen();
+
+        string userEval = "?"; string refPv = "";
+        var after = await Task.Run(() => StockfishEngine.Analyze(afterFen));
+        if (after != null)
+        {
+            userEval = EvalText(after.ScoreType, -after.ScoreVal, who);  // giliran lawan -> balik tanda ke sudut pandang pemain
+            refPv = PvToSan(afterFen, after.Pv, 5);
+        }
+
+        string text;
+        if (isBest)
+            text = $"\U0001F50D *{userSan}* \u2014 itu memang langkah TERBAIK! (eval {bestEval})";
+        else
+            text = $"\U0001F50D *Analisa langkah* ({who} jalan)\n" +
+                   $"Langkahmu *{userSan}*: eval {userEval}\n" +
+                   $"Terbaik *{bestSan}*: eval {bestEval}" +
+                   (refPv.Length > 0 ? $"\nSetelah {userSan}, lawan: {refPv}" : "");
+
+        if (ai is { Enabled: true })
+        {
+            string prompt = isBest
+                ? $"Posisi catur FEN {fen}, {who} jalan. Pemain memainkan {userSan} dan itu MEMANG langkah terbaik menurut engine (eval {bestEval}). Jelaskan 1-2 kalimat singkat & natural kenapa bagus. Jangan ragukan, jangan usulkan langkah lain."
+                : $"Posisi catur FEN {fen}, {who} jalan. Pemain main {userSan} (eval {userEval}), padahal langkah TERBAIK menurut Stockfish adalah {bestSan} (eval {bestEval}). " +
+                  (refPv.Length > 0 ? $"Setelah {userSan}, lawan membalas: {refPv}. " : "") +
+                  $"Jelaskan 1-2 kalimat SINGKAT & natural kenapa {userSan} kurang baik dibanding {bestSan}, BERDASAR angka & garis engine di atas SAJA. " +
+                  $"JANGAN mengarang garis lain. Kalau tak yakin detail, sebut alasan umum (kehilangan tempo/bidak, melemahkan raja, melewatkan taktik/skak). JANGAN menyebut langkah selain {bestSan} sebagai terbaik.";
+            try { string? e = await Ai.Ask(ai, http, prompt, logger); if (!string.IsNullOrWhiteSpace(e)) text += $"\n\U0001F4A1 {e!.Trim()}"; } catch { }
+        }
+        return new Output(text, fen);
+    }
+
+    static bool LooksLikeMove(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return false;
+        if (s == "O-O" || s == "O-O-O" || s == "0-0" || s == "0-0-0") return true;
+        string t = s.TrimEnd('+', '#', '!', '?');
+        int eq = t.IndexOf('=');
+        if (eq > 0) t = t.Substring(0, eq);
+        if (t.Length < 2 || t.Length > 6) return false;
+        char f = t[t.Length - 2], r = t[t.Length - 1];
+        if (f < 'a' || f > 'h' || r < '1' || r > '8') return false;
+        char c0 = t[0];
+        return c0 == 'K' || c0 == 'Q' || c0 == 'R' || c0 == 'B' || c0 == 'N' || (c0 >= 'a' && c0 <= 'h');
+    }
+
+    static string NormSan(string s) => new string((s ?? "").Where(c => !"xX+#!?=".Contains(c)).ToArray()).Replace("0", "O").ToLowerInvariant();
 
     static string EvalText(string type, int val, string who)
     {
