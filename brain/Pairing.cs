@@ -69,7 +69,20 @@ internal static class PairingCommand
 		bool isReset = !isPair && t.Contains("reset") && (t.Contains("klasemen") || t.Contains("standings") || t.Contains("musim"));
 		bool isStats = !isPair && (t.Contains("statistik") || t.Contains("rekap") || t.Contains("stats"));
 		bool isKlasemen = !isPair && !isReset && (t.Contains("klasemen") || t.Contains("standings"));
-		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards && !isHelp && !isRematch && !isKlasemen && !isReset && !isStats)
+		// Turnamen mini. "turnamen" TANPA tag pemain dibiarkan null -> dijawab fitur JADWAL lama.
+		int mcount = 0;
+		foreach (MentionPair m0 in (msg.Mentions ?? Array.Empty<MentionPair>()))
+		{
+			if (!string.IsNullOrEmpty(m0.Phone))
+			{
+				mcount++;
+			}
+		}
+		bool tWord = t.Contains("turnamen") || t.Contains("tournament");
+		bool isTournEnd = !isPair && tWord && (t.Contains("selesai") || t.Contains("akhiri") || t.Contains("tutup") || t.Contains("stop") || t.Contains("juara"));
+		bool isTournStart = !isPair && tWord && !isTournEnd && mcount >= 2;
+		bool isRonde = !isPair && (t.Contains("ronde") || t.Contains("babak"));
+		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards && !isHelp && !isRematch && !isKlasemen && !isReset && !isStats && !isTournStart && !isTournEnd && !isRonde)
 		{
 			return null;
 		}
@@ -77,6 +90,69 @@ internal static class PairingCommand
 		{
 			await Send(http, outBase, msg.Jid, "Perintah pairing khusus admin.", null, logger);
 			return "pair-denied";
+		}
+
+		// ===== TURNAMEN: MULAI =====  @bot turnamen @A @B @C @D
+		if (isTournStart)
+		{
+			List<PairingTournament.TPlayer> tps = new List<PairingTournament.TPlayer>();
+			foreach (MentionPair m in (msg.Mentions ?? Array.Empty<MentionPair>()))
+			{
+				if (string.IsNullOrEmpty(m.Phone))
+				{
+					continue;
+				}
+				LciClient.LookupResult lu = await LciClient.LookupByPhone(config, http, m.Phone, logger);
+				if (lu.Found && lu.Verified && lu.Handle.Length > 0)
+				{
+					tps.Add(new PairingTournament.TPlayer { Handle = lu.Handle, Name = (!string.IsNullOrWhiteSpace(lu.FullName) ? lu.FullName : lu.Handle), Lid = m.Lid, Phone = m.Phone });
+				}
+			}
+			if (tps.Count < 2)
+			{
+				await Send(http, outBase, msg.Jid, "Butuh minimal 2 pemain terdaftar & terverifikasi. Tag pemainnya ya.", null, logger);
+				return "turnamen-need";
+			}
+			int tl;
+			int ti;
+			ParseTime(t, out tl, out ti);
+			PairingStandings.Reset(msg.Jid);
+			PairingTournament.StartNew(msg.Jid, tps, tl, ti);
+			await Send(http, outBase, msg.Jid, "🏆 Turnamen dimulai! " + tps.Count + " pemain · G" + (tl / 60) + "+" + ti + " unrated. Klasemen direset.", null, logger);
+			PairingTournament.TState? stNew = PairingTournament.Get(msg.Jid);
+			if (stNew != null)
+			{
+				await RunRound(config, http, logger, outBase, msg.Jid, stNew);
+			}
+			return "turnamen-start";
+		}
+
+		// ===== TURNAMEN: RONDE BERIKUTNYA =====  @bot ronde
+		if (isRonde)
+		{
+			PairingTournament.TState? st = PairingTournament.Get(msg.Jid);
+			if (st == null || !st.Active)
+			{
+				await Send(http, outBase, msg.Jid, "Tidak ada turnamen aktif. Mulai dulu: @bot turnamen @A @B @C @D", null, logger);
+				return "ronde-none";
+			}
+			await RunRound(config, http, logger, outBase, msg.Jid, st);
+			return "ronde";
+		}
+
+		// ===== TURNAMEN: SELESAI =====  @bot turnamen selesai
+		if (isTournEnd)
+		{
+			PairingTournament.TState? ste = PairingTournament.Get(msg.Jid);
+			if (ste == null)
+			{
+				await Send(http, outBase, msg.Jid, "Tidak ada turnamen aktif.", null, logger);
+				return "turnamen-end-none";
+			}
+			string standings = PairingStandings.Format(msg.Jid);
+			PairingTournament.End(msg.Jid);
+			await Send(http, outBase, msg.Jid, "🏁 Turnamen selesai!\n\n" + standings + "\n\nTerima kasih sudah bertanding! 👏", null, logger);
+			return "turnamen-end";
 		}
 
 		if (isCancel)
@@ -123,7 +199,11 @@ internal static class PairingCommand
 				+ "• @bot klasemen — tabel menang/seri/kalah\n"
 				+ "• @bot statistik @A — rekap pribadi pemain\n"
 				+ "• @bot reset klasemen — mulai musim baru\n"
-				+ "• @bot info @A — info pemain (handle Lichess, verifikasi)";
+				+ "• @bot info @A — info pemain (handle Lichess, verifikasi)\n"
+				+ "\nTurnamen mini (Swiss):\n"
+				+ "• @bot turnamen @A @B @C @D — mulai turnamen + ronde 1\n"
+				+ "• @bot ronde — pair ronde berikutnya (by klasemen)\n"
+				+ "• @bot turnamen selesai — umumkan juara & tutup";
 			await Send(http, outBase, msg.Jid, help, null, logger);
 			return "help";
 		}
@@ -432,7 +512,7 @@ internal static class PairingCommand
 
 	// Ambil BulkID dari teks perintah start/cancel: token pertama yang BUKAN mention (@..),
 	// bukan kata kunci, panjang >= 3. "" kalau tak ada (-> pakai board terakhir grup).
-	private static readonly string[] _bulkKw = new string[] { "start", "mulai", "jalankan", "jam", "clock", "clocks", "cancel", "batal", "hapus", "board", "boards", "papan", "game", "pairing", "bulk", "id", "bulkid", "pair", "pasang", "info", "profil", "hasil", "result", "skor", "score", "rated", "unrated", "casual", "latihan", "langsung", "sekaligus", "gas", "now", "please", "tolong" };
+	private static readonly string[] _bulkKw = new string[] { "start", "mulai", "jalankan", "jam", "clock", "clocks", "cancel", "batal", "hapus", "board", "boards", "papan", "game", "pairing", "bulk", "id", "bulkid", "pair", "pasang", "info", "profil", "hasil", "result", "skor", "score", "rated", "unrated", "casual", "latihan", "langsung", "sekaligus", "gas", "now", "please", "tolong", "turnamen", "tournament", "ronde", "babak", "selesai", "klasemen", "statistik", "rematch", "bantuan" };
 
 	private static readonly Regex BulkRx = new Regex("^[A-Za-z0-9]{6,16}$", RegexOptions.CultureInvariant);
 
@@ -541,6 +621,105 @@ internal static class PairingCommand
 			await LciClient.StartClocks(config, http, pr.BulkId, logger);
 		}
 		return "♟️ " + wName + " (putih) vs " + bName + " (hitam)\n" + pr.Url + "\nBulkID: " + pr.BulkId;
+	}
+
+	// Jalankan satu ronde turnamen: susun pasangan (acak utk ronde 1; by-klasemen utk ronde >1,
+	// hindari ulang lawan; bye utk ganjil), buat board (jam langsung jalan), kirim + simpan state.
+	private static async Task RunRound(AppConfig config, HttpClient http, ILogger logger, string outBase, string jid, PairingTournament.TState st)
+	{
+		int newRound = st.Round + 1;
+		List<PairingTournament.TPlayer> pool = new List<PairingTournament.TPlayer>(st.Players);
+		if (newRound == 1)
+		{
+			for (int i = pool.Count - 1; i > 0; i--)
+			{
+				int j = Random.Shared.Next(i + 1);
+				PairingTournament.TPlayer tmp = pool[i];
+				pool[i] = pool[j];
+				pool[j] = tmp;
+			}
+		}
+		else
+		{
+			pool.Sort((PairingTournament.TPlayer a, PairingTournament.TPlayer b) => PairingStandings.PointsOf(jid, b.Handle).CompareTo(PairingStandings.PointsOf(jid, a.Handle)));
+		}
+		PairingTournament.TPlayer? bye = null;
+		if (pool.Count % 2 == 1)
+		{
+			bye = pool[pool.Count - 1];
+			pool.RemoveAt(pool.Count - 1);
+		}
+		List<(PairingTournament.TPlayer w, PairingTournament.TPlayer b)> pairs = new List<(PairingTournament.TPlayer, PairingTournament.TPlayer)>();
+		while (pool.Count >= 2)
+		{
+			PairingTournament.TPlayer a = pool[0];
+			pool.RemoveAt(0);
+			int j = 0;
+			while (j < pool.Count && st.Played.Contains(PairingTournament.PairKey(a.Handle, pool[j].Handle)))
+			{
+				j++;
+			}
+			if (j >= pool.Count)
+			{
+				j = 0; // semua sudah pernah lawan -> terima ulang
+			}
+			PairingTournament.TPlayer bb = pool[j];
+			pool.RemoveAt(j);
+			if (newRound % 2 == 0)
+			{
+				pairs.Add((bb, a)); // warna gantian per ronde
+			}
+			else
+			{
+				pairs.Add((a, bb));
+			}
+		}
+		StringBuilder sb = new StringBuilder("🏆 Ronde " + newRound + ":\n\n");
+		List<string> tagLids = new List<string>();
+		foreach (var p in pairs)
+		{
+			string line = await CreateBoardByHandles(config, http, logger, jid, p.w, p.b, st.LimitSec, st.IncSec);
+			sb.Append(line + "\n\n");
+			st.Played.Add(PairingTournament.PairKey(p.w.Handle, p.b.Handle));
+			if (!string.IsNullOrEmpty(p.w.Lid))
+			{
+				tagLids.Add(p.w.Lid);
+			}
+			if (!string.IsNullOrEmpty(p.b.Lid))
+			{
+				tagLids.Add(p.b.Lid);
+			}
+		}
+		if (bye != null)
+		{
+			sb.Append("⏸️ " + bye.Name + " dapat BYE ronde ini.\n");
+		}
+		st.Round = newRound;
+		PairingTournament.Update(jid, st);
+		EnsurePoller(config, http, outBase, logger);
+		if (tagLids.Count > 0)
+		{
+			sb.Append("\nMain yuk");
+			foreach (string l in tagLids)
+			{
+				sb.Append(" @" + l);
+			}
+			sb.Append("!");
+		}
+		await Send(http, outBase, jid, sb.ToString().TrimEnd(), tagLids.ToArray(), logger);
+	}
+
+	// Buat board langsung dari handle (turnamen) + start jam. Balik baris ringkas.
+	private static async Task<string> CreateBoardByHandles(AppConfig config, HttpClient http, ILogger logger, string jid, PairingTournament.TPlayer w, PairingTournament.TPlayer b, int limit, int inc)
+	{
+		LciClient.PairResult pr = await LciClient.Pair(config, http, w.Handle, b.Handle, limit, inc, false, config.Lci!.DefaultVariant, logger);
+		if (!pr.Success || pr.Url.Length == 0)
+		{
+			return "⚠️ " + w.Name + " vs " + b.Name + ": gagal. " + Clip(pr.Message);
+		}
+		AddBoard(jid, pr.BulkId, w.Name, b.Name, w.Handle, b.Handle, w.Lid, b.Lid, pr.Url, limit, inc, false);
+		await LciClient.StartClocks(config, http, pr.BulkId, logger); // turnamen: jam langsung jalan
+		return "♟️ " + w.Name + " (P) vs " + b.Name + " (H)\n" + pr.Url;
 	}
 
 	private static void MarkDone(string jid, string bulkId)

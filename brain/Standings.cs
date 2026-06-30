@@ -196,6 +196,21 @@ internal static class PairingStandings
 		}
 	}
 
+	// Poin 1 pemain (W + 0.5*D). 0 kalau belum ada. Buat urutkan peserta turnamen.
+	public static double PointsOf(string jid, string key)
+	{
+		lock (_lk)
+		{
+			Dictionary<string, Dictionary<string, Rec>> data = Load();
+			if (data.TryGetValue(jid, out Dictionary<string, Rec>? g) && g != null
+				&& g.TryGetValue(key.ToLowerInvariant(), out Rec? r) && r != null)
+			{
+				return r.W + 0.5 * r.D;
+			}
+			return 0.0;
+		}
+	}
+
 	// Reset klasemen 1 grup (mulai musim baru). true kalau ada yang dihapus.
 	public static bool Reset(string jid)
 	{
