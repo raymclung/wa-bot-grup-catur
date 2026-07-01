@@ -35,6 +35,7 @@ function Copy-Into($src, $relDest) {
 Copy-Into (Join-Path $root 'gateway\auth')          'gateway\auth'
 Copy-Into (Join-Path $root 'gateway\config.json')   'gateway\config.json'
 Copy-Into (Join-Path $root 'brain\config')          'brain\config'
+Copy-Into (Join-Path $root 'brain\logs\audit.log')  'brain\logs\audit.log'   # jejak audit aksi admin
 
 # brain\data\*.json KECUALI puzzles.json (5MB, bisa dibuat ulang via build_puzzle_pool.py)
 $dataDest = Join-Path $stage 'brain\data'
