@@ -84,10 +84,14 @@ internal static class PairingCommand
 			}
 		}
 		bool tWord = t.Contains("turnamen") || t.Contains("tournament");
-		bool isTournEnd = !isPair && tWord && (t.Contains("selesai") || t.Contains("akhiri") || t.Contains("tutup") || t.Contains("stop") || t.Contains("juara"));
-		bool isTournStart = !isPair && tWord && !isTournEnd && mcount >= 2;
-		bool isRonde = !isPair && (t.Contains("ronde") || t.Contains("babak"));
-		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards && !isHelp && !isRematch && !isKlasemen && !isReset && !isStats && !isTournStart && !isTournEnd && !isRonde)
+		bool isTournEnd = !isPair && tWord && (t.Contains("selesai") || t.Contains("akhiri") || t.Contains("juara") || t.Contains("umumkan"));
+		bool isTournCancel = !isPair && tWord && !isTournEnd && (t.Contains("batal") || t.Contains("cancel") || t.Contains("stop") || t.Contains("hentikan") || t.Contains("tutup"));
+		bool isTournStatus = !isPair && tWord && t.Contains("status");
+		bool isTournAdd = !isPair && tWord && mcount >= 1 && (t.Contains("tambah") || t.Contains("masuk") || t.Contains(" add"));
+		bool isTournRemove = !isPair && tWord && mcount >= 1 && (t.Contains("keluar") || t.Contains("mundur") || t.Contains("coret") || t.Contains("remove"));
+		bool isTournStart = !isPair && tWord && mcount >= 2 && !isTournEnd && !isTournCancel && !isTournStatus && !isTournAdd && !isTournRemove;
+		bool isRonde = !isPair && !tWord && (t.Contains("ronde") || t.Contains("babak"));
+		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards && !isHelp && !isRematch && !isKlasemen && !isReset && !isStats && !isTournStart && !isTournEnd && !isTournCancel && !isTournStatus && !isTournAdd && !isTournRemove && !isRonde)
 		{
 			return null;
 		}
@@ -178,6 +182,102 @@ internal static class PairingCommand
 			return "turnamen-end";
 		}
 
+		// ===== TURNAMEN: BATAL =====  @bot turnamen batal (tanpa umumkan juara)
+		if (isTournCancel)
+		{
+			PairingTournament.TState? stc = PairingTournament.Get(msg.Jid);
+			if (stc == null)
+			{
+				await Send(http, outBase, msg.Jid, "Tidak ada turnamen aktif.", null, logger);
+				return "turnamen-cancel-none";
+			}
+			PairingTournament.End(msg.Jid);
+			await Send(http, outBase, msg.Jid, "🛑 Turnamen dibatalkan. Game yang sudah dibuat tetap bisa dimainkan; juara tidak diumumkan.", null, logger);
+			return "turnamen-cancel";
+		}
+
+		// ===== TURNAMEN: STATUS =====  @bot turnamen status
+		if (isTournStatus)
+		{
+			PairingTournament.TState? sts = PairingTournament.Get(msg.Jid);
+			if (sts == null || !sts.Active)
+			{
+				await Send(http, outBase, msg.Jid, "Tidak ada turnamen aktif.", null, logger);
+				return "turnamen-status-none";
+			}
+			StringBuilder sbst = new StringBuilder("🏆 Status Turnamen\nRonde " + sts.Round + "/" + sts.TotalRounds + " · " + sts.Players.Count + " pemain · G" + (sts.LimitSec / 60) + "+" + sts.IncSec + " unrated\n\n");
+			sbst.Append(PairingStandings.Format(msg.Jid));
+			await Send(http, outBase, msg.Jid, sbst.ToString(), null, logger);
+			return "turnamen-status";
+		}
+
+		// ===== TURNAMEN: TAMBAH PEMAIN =====  @bot turnamen tambah @X
+		if (isTournAdd)
+		{
+			PairingTournament.TState? sta = PairingTournament.Get(msg.Jid);
+			if (sta == null || !sta.Active)
+			{
+				await Send(http, outBase, msg.Jid, "Tidak ada turnamen aktif. Mulai dulu: @bot turnamen @A @B ...", null, logger);
+				return "turnamen-add-none";
+			}
+			List<string> added = new List<string>();
+			List<string> addFail = new List<string>();
+			foreach (MentionPair m in (msg.Mentions ?? Array.Empty<MentionPair>()))
+			{
+				if (string.IsNullOrEmpty(m.Phone))
+				{
+					addFail.Add("@" + m.Lid + " (nomor belum dikenal)");
+					continue;
+				}
+				LciClient.LookupResult lu = await LciClient.LookupByPhone(config, http, m.Phone, logger);
+				if (!lu.Found || !lu.Verified || lu.Handle.Length == 0)
+				{
+					addFail.Add("@" + m.Lid + " (belum terdaftar LCI)");
+					continue;
+				}
+				string h = lu.Handle.ToLowerInvariant();
+				if (sta.Players.Exists((PairingTournament.TPlayer p) => p.Handle.ToLowerInvariant() == h))
+				{
+					continue; // sudah ikut
+				}
+				string nm = (!string.IsNullOrWhiteSpace(lu.FullName) ? lu.FullName : lu.Handle);
+				sta.Players.Add(new PairingTournament.TPlayer { Handle = lu.Handle, Name = nm, Lid = m.Lid, Phone = m.Phone });
+				added.Add(nm);
+			}
+			PairingTournament.Update(msg.Jid, sta);
+			string arep = (added.Count > 0) ? ("✅ Ditambahkan: " + string.Join(", ", added) + ". Ikut mulai ronde berikutnya.") : "Tidak ada pemain baru ditambahkan.";
+			if (addFail.Count > 0)
+			{
+				arep += "\n⚠️ Gagal: " + string.Join(", ", addFail);
+			}
+			await Send(http, outBase, msg.Jid, arep, null, logger);
+			return "turnamen-add";
+		}
+
+		// ===== TURNAMEN: KELUARKAN PEMAIN =====  @bot turnamen keluar @X
+		if (isTournRemove)
+		{
+			PairingTournament.TState? str = PairingTournament.Get(msg.Jid);
+			if (str == null || !str.Active)
+			{
+				await Send(http, outBase, msg.Jid, "Tidak ada turnamen aktif.", null, logger);
+				return "turnamen-remove-none";
+			}
+			List<string> removed = new List<string>();
+			foreach (MentionPair m in (msg.Mentions ?? Array.Empty<MentionPair>()))
+			{
+				int idx = str.Players.FindIndex((PairingTournament.TPlayer p) => (m.Phone.Length > 0 && p.Phone == m.Phone) || (p.Lid.Length > 0 && p.Lid == m.Lid));
+				if (idx >= 0)
+				{
+					removed.Add(str.Players[idx].Name);
+					str.Players.RemoveAt(idx);
+				}
+			}
+			PairingTournament.Update(msg.Jid, str);
+			await Send(http, outBase, msg.Jid, (removed.Count > 0) ? ("👋 Dikeluarkan: " + string.Join(", ", removed) + ". Berlaku mulai ronde berikutnya.") : "Tidak ada pemain cocok yang dikeluarkan.", null, logger);
+			return "turnamen-remove";
+		}
+
 		if (isCancel)
 		{
 			string bulkC = (bulkArg.Length > 0) ? bulkArg : GetLast(msg.Jid);
@@ -223,10 +323,14 @@ internal static class PairingCommand
 				+ "• @bot statistik @A — rekap pribadi pemain\n"
 				+ "• @bot reset klasemen — mulai musim baru\n"
 				+ "• @bot info @A — info pemain (handle Lichess, verifikasi)\n"
-				+ "\nTurnamen mini (Swiss):\n"
-				+ "• @bot turnamen @A @B @C @D — mulai turnamen + ronde 1\n"
-				+ "• @bot ronde — pair ronde berikutnya (by klasemen)\n"
-				+ "• @bot turnamen selesai — umumkan juara & tutup";
+				+ "\nTurnamen mini (Swiss, auto-lanjut ronde):\n"
+				+ "• @bot turnamen @A @B @C @D [N ronde] — mulai (default 1 babak)\n"
+				+ "• @bot turnamen status — ronde/peserta/klasemen sekarang\n"
+				+ "• @bot turnamen tambah @X — tambah peserta\n"
+				+ "• @bot turnamen keluar @X — keluarkan peserta\n"
+				+ "• @bot ronde — pair ronde berikutnya manual\n"
+				+ "• @bot turnamen selesai — umumkan juara & tutup\n"
+				+ "• @bot turnamen batal — hentikan tanpa juara";
 			await Send(http, outBase, msg.Jid, help, null, logger);
 			return "help";
 		}
