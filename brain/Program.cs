@@ -6593,7 +6593,9 @@ public class Program
 						{
 							// nama tampil lewat mention @senderNum (di-tag agar pemain ke-notify)
 							string nextSanW = (idx < sol.Length) ? sol[idx] : "";
-							string text4 = (pap.WrongCount <= 3) ? ("Belum pas, @" + senderNum + ". " + PuzzleMove.LocalWrongHint(nextSanW, pap.WrongCount)) : ("Belum pas, @" + senderNum + ".");
+							string engHintW = null;
+							if (pap.WrongCount <= 3 && StockfishEngine.Available) { string curFenW = (idx > 0 && idx - 1 < pap.Puzzle.Fens.Length) ? pap.Puzzle.Fens[idx - 1] : pap.Puzzle.Fen; try { engHintW = await ChessAnalysis.CritiqueSafe(curFenW, attempt); } catch { } }
+							string text4 = (pap.WrongCount <= 3) ? ("Belum pas, @" + senderNum + ".\n" + (engHintW ?? PuzzleMove.LocalWrongHint(nextSanW, pap.WrongCount))) : ("Belum pas, @" + senderNum + ".");
 							if (pap.WrongCount >= 4 && !pap.SolveHintShown)
 							{
 								text4 += "\n\nKetik " + cl_472.config.CommandPrefix + (cl_472.config.Puzzle?.SolveCommand ?? "solusi") + " untuk lihat jawabannya."; pap.SolveHintShown = true;
