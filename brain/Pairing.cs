@@ -705,6 +705,13 @@ internal static class PairingCommand
 				}
 			}
 		}
+		// Turnamen aktif WAJIB tetap dipantau: kalau satu ronde SELESAI persis saat brain
+		// mati, semua board jadi Done -> tanpa ini poller tak nyala -> MaybeAdvance tak jalan
+		// -> ronde berikutnya tak auto-lanjut / juara tak diumumkan (turnamen macet).
+		if (!hasActive && PairingTournament.AllActive().Count > 0)
+		{
+			hasActive = true;
+		}
 		if (hasActive)
 		{
 			EnsurePoller(config, http, ChannelRoute.Base(config, "whatsapp"), logger);
