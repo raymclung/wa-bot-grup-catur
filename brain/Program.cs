@@ -1069,7 +1069,7 @@ public class Program
 				quiet = quietNow
 			});
 			IL_1457:
-			if (num3 != 0)
+			if (num3 != 0 && !isCommand) // DM/konsol: kalau command (mis. !analisa) JANGAN AI-chat, teruskan ke dispatch
 			{
 				if (!PrivateChatAccess.IsAllowed(config, pcDM, senderNum, senderPhone))
 				{
@@ -2409,6 +2409,7 @@ public class Program
 								action = "analisa-nomedia"
 							});
 						}
+						try { File.WriteAllBytes(Path.Combine(puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG sementara: tuning recognition Chess.com
 						bool autoFlipped;
 						string placement = BoardVision.RecognizeFenAuto(imgBytes, pieceAssetsDir, out autoFlipped);
 						if (placement == null)
@@ -4955,7 +4956,7 @@ public class Program
 				quiet = quietNow
 			});
 			IL_1457:
-			if (num3 != 0)
+			if (num3 != 0 && !isCommand) // DM/konsol: kalau command (mis. !analisa) JANGAN AI-chat, teruskan ke dispatch
 			{
 				if (!PrivateChatAccess.IsAllowed(cl_472.config, pcDM, senderNum, senderPhone))
 				{
@@ -6287,6 +6288,7 @@ public class Program
 								action = "analisa-nomedia"
 							});
 						}
+						try { File.WriteAllBytes(Path.Combine(cl_472.puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG sementara: tuning recognition Chess.com
 						bool autoFlipped;
 						string placement = BoardVision.RecognizeFenAuto(imgBytes, cl_472.pieceAssetsDir, out autoFlipped);
 						if (placement == null)
