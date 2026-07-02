@@ -1039,6 +1039,14 @@ internal static class PairingCommand
 		}
 	}
 
+	// True kalau board ini bagian dari ronde turnamen aktif (buat batasi reminder no-show).
+	private static bool IsTournamentBoard(string jid, string bulkId)
+	{
+		Dictionary<string, PairingTournament.TState> actives = PairingTournament.AllActive();
+		return actives.TryGetValue(jid, out PairingTournament.TState? st) && st != null
+			&& st.RoundBulkIds != null && st.RoundBulkIds.Contains(bulkId);
+	}
+
 	private static async Task FinishTournament(AppConfig config, HttpClient http, string outBase, string jid, ILogger logger)
 	{
 		string standings = PairingStandings.Format(jid);
@@ -1129,7 +1137,7 @@ internal static class PairingCommand
 						{
 							// No-show reminder: game belum ada langkah setelah ~2 menit -> nudge sekali.
 							bool notStarted = ri.Ok && ri.Games.Count > 0 && !ri.Games[0].Started && !ri.Games[0].Finished;
-							if (notStarted && b.Polls >= 3 && !b.Reminded && b.WhiteLid.Length > 0 && b.BlackLid.Length > 0)
+							if (notStarted && b.Polls >= 3 && !b.Reminded && b.WhiteLid.Length > 0 && b.BlackLid.Length > 0 && IsTournamentBoard(jid, b.BulkId))
 							{
 								lock (_lock)
 								{
