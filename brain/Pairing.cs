@@ -97,9 +97,10 @@ internal static class PairingCommand
 		bool isTournStatus = !isPair && tWord && t.Contains("status");
 		bool isTournAdd = !isPair && tWord && mcount >= 1 && (t.Contains("tambah") || t.Contains("masuk") || t.Contains(" add"));
 		bool isTournRemove = !isPair && tWord && mcount >= 1 && (t.Contains("keluar") || t.Contains("mundur") || t.Contains("coret") || t.Contains("remove"));
-		bool isTournStart = !isPair && tWord && mcount >= 2 && !isTournEnd && !isTournCancel && !isTournStatus && !isTournAdd && !isTournRemove;
+		bool isTournHistory = !isPair && tWord && (t.Contains("riwayat") || t.Contains("history") || t.Contains("arsip"));
+		bool isTournStart = !isPair && tWord && mcount >= 2 && !isTournEnd && !isTournCancel && !isTournStatus && !isTournAdd && !isTournRemove && !isTournHistory;
 		bool isRonde = !isPair && !tWord && (t.Contains("ronde") || t.Contains("babak"));
-		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards && !isHelp && !isRematch && !isKlasemen && !isReset && !isStats && !isTournStart && !isTournEnd && !isTournCancel && !isTournStatus && !isTournAdd && !isTournRemove && !isRonde)
+		if (!isPair && !isStart && !isCancel && !isInfo && !isResult && !isBoards && !isHelp && !isRematch && !isKlasemen && !isReset && !isStats && !isTournStart && !isTournEnd && !isTournCancel && !isTournStatus && !isTournAdd && !isTournRemove && !isTournHistory && !isRonde)
 		{
 			return null;
 		}
@@ -184,9 +185,7 @@ internal static class PairingCommand
 				await Send(http, outBase, msg.Jid, "Tidak ada turnamen aktif.", null, logger);
 				return "turnamen-end-none";
 			}
-			string standings = PairingStandings.Format(msg.Jid);
-			PairingTournament.End(msg.Jid);
-			await Send(http, outBase, msg.Jid, "🏁 Turnamen selesai!\n\n" + standings + "\n\nTerima kasih sudah bertanding! 👏", null, logger);
+			await FinishTournament(config, http, outBase, msg.Jid, logger);
 			return "turnamen-end";
 		}
 
@@ -217,6 +216,26 @@ internal static class PairingCommand
 			sbst.Append(PairingStandings.Format(msg.Jid));
 			await Send(http, outBase, msg.Jid, sbst.ToString(), null, logger);
 			return "turnamen-status";
+		}
+
+		// ===== TURNAMEN: RIWAYAT =====  @bot turnamen riwayat
+		if (isTournHistory)
+		{
+			List<PairingTournament.THistory> hist = PairingTournament.GetHistory(msg.Jid);
+			if (hist.Count == 0)
+			{
+				await Send(http, outBase, msg.Jid, "Belum ada riwayat turnamen di grup ini.", null, logger);
+				return "turnamen-history-none";
+			}
+			StringBuilder sbh = new StringBuilder("📜 Riwayat Turnamen (terbaru):\n");
+			int shown = 0;
+			for (int i = hist.Count - 1; i >= 0 && shown < 10; i--, shown++)
+			{
+				PairingTournament.THistory h = hist[i];
+				sbh.Append("• " + h.Date + " — " + h.PlayerCount + " pemain, " + h.Rounds + " ronde · 🥇 " + (h.Winner.Length > 0 ? h.Winner : "-") + "\n");
+			}
+			await Send(http, outBase, msg.Jid, sbh.ToString().TrimEnd(), null, logger);
+			return "turnamen-history";
 		}
 
 		// ===== TURNAMEN: TAMBAH PEMAIN =====  @bot turnamen tambah @X
@@ -338,7 +357,8 @@ internal static class PairingCommand
 				+ "• @bot turnamen keluar @X — keluarkan peserta\n"
 				+ "• @bot ronde — pair ronde berikutnya manual\n"
 				+ "• @bot turnamen selesai — umumkan juara & tutup\n"
-				+ "• @bot turnamen batal — hentikan tanpa juara";
+				+ "• @bot turnamen batal — hentikan tanpa juara\n"
+				+ "• @bot turnamen riwayat — daftar turnamen selesai + juara";
 			await Send(http, outBase, msg.Jid, help, null, logger);
 			return "help";
 		}
@@ -1021,8 +1041,19 @@ internal static class PairingCommand
 	private static async Task FinishTournament(AppConfig config, HttpClient http, string outBase, string jid, ILogger logger)
 	{
 		string standings = PairingStandings.Format(jid);
+		string winner = PairingStandings.Winner(jid);
+		PairingTournament.TState? stf = PairingTournament.Get(jid);
+		PairingTournament.AddHistory(jid, new PairingTournament.THistory
+		{
+			Date = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm"),
+			PlayerCount = (stf != null) ? stf.Players.Count : 0,
+			Rounds = (stf != null) ? stf.TotalRounds : 0,
+			Winner = winner,
+			Standings = standings
+		});
 		PairingTournament.End(jid);
-		await Send(http, outBase, jid, "🏁 Turnamen selesai!\n\n" + standings + "\n\nTerima kasih sudah bertanding! 👏", null, logger);
+		string wline = (winner.Length > 0) ? ("\n🥇 Juara: " + winner) : "";
+		await Send(http, outBase, jid, "🏁 Turnamen selesai!" + wline + "\n\n" + standings + "\n\nTerima kasih sudah bertanding! 👏", null, logger);
 	}
 
 	private static void MarkDone(string jid, string bulkId)

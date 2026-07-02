@@ -128,4 +128,66 @@ internal static class PairingTournament
 		string y = b.ToLowerInvariant();
 		return (string.CompareOrdinal(x, y) <= 0) ? (x + "|" + y) : (y + "|" + x);
 	}
+
+	// ===== Riwayat turnamen selesai (per grup) =====
+	private static string HistoryPath => Path.Combine(DataDir, "pairing-tournament-history.json");
+
+	public sealed class THistory
+	{
+		public string Date { get; set; } = "";
+		public int PlayerCount { get; set; }
+		public int Rounds { get; set; }
+		public string Winner { get; set; } = "";
+		public string Standings { get; set; } = "";
+	}
+
+	private static Dictionary<string, List<THistory>> LoadHistory()
+	{
+		try
+		{
+			if (File.Exists(HistoryPath))
+			{
+				return JsonSerializer.Deserialize<Dictionary<string, List<THistory>>>(File.ReadAllText(HistoryPath)) ?? new Dictionary<string, List<THistory>>();
+			}
+		}
+		catch
+		{
+		}
+		return new Dictionary<string, List<THistory>>();
+	}
+
+	public static void AddHistory(string jid, THistory h)
+	{
+		lock (_lk)
+		{
+			Dictionary<string, List<THistory>> data = LoadHistory();
+			if (!data.TryGetValue(jid, out List<THistory>? list) || list == null)
+			{
+				list = new List<THistory>();
+				data[jid] = list;
+			}
+			list.Add(h);
+			if (list.Count > 50) // simpan maks 50 terakhir per grup
+			{
+				list.RemoveRange(0, list.Count - 50);
+			}
+			try
+			{
+				Directory.CreateDirectory(DataDir);
+				File.WriteAllText(HistoryPath, JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true }));
+			}
+			catch
+			{
+			}
+		}
+	}
+
+	public static List<THistory> GetHistory(string jid)
+	{
+		lock (_lk)
+		{
+			Dictionary<string, List<THistory>> data = LoadHistory();
+			return (data.TryGetValue(jid, out List<THistory>? list) && list != null) ? list : new List<THistory>();
+		}
+	}
 }

@@ -239,6 +239,28 @@ internal static class PairingStandings
 		}
 	}
 
+	// Nama pemain teratas (juara) di grup. "" kalau belum ada hasil.
+	public static string Winner(string jid)
+	{
+		lock (_lk)
+		{
+			Dictionary<string, Dictionary<string, Rec>> data = Load();
+			if (!data.TryGetValue(jid, out Dictionary<string, Rec>? g) || g == null || g.Count == 0)
+			{
+				return "";
+			}
+			Rec? top = null;
+			foreach (Rec r in g.Values)
+			{
+				if (top == null || Points(r) > Points(top))
+				{
+					top = r;
+				}
+			}
+			return (top != null) ? (top.Name + " (" + Pts(Points(top)) + " poin)") : "";
+		}
+	}
+
 	// Reset klasemen 1 grup (mulai musim baru). true kalau ada yang dihapus.
 	public static bool Reset(string jid)
 	{
