@@ -102,7 +102,56 @@ Catatan anti-ban:
 - Jika bot salah hapus, reply pesan dan ketik `!lapor`.
 - Jika bot diam total, hubungi tim teknis.
 
-## 8. Cheat Sheet
+## 8. Pairing & Turnamen (Liga Catur)
+
+Semua perintah ini **tag bot** (`@bot ...`) dan **khusus admin**. Pemain diambil dari **tag** (`@nama`).
+
+> **Penting:** pemain yang di-tag harus (1) **pernah kirim minimal 1 pesan** di grup — biar bot tahu nomornya, DAN (2) **terdaftar + verifikasi** di ligacatur.com. Yang belum otomatis dilewati + dilaporkan bot.
+
+### Pairing satuan
+| Perintah | Fungsi |
+|---|---|
+| `@bot pair @A vs @B` | Buat 1 game (default unrated, G5+0) |
+| `@bot pair @A vs @B rated G5+1` | Atur rated + waktu (G<menit>+<increment>) |
+| `@bot pair @A vs @B G3+2 gas` | Tambah `gas`/`mulai` = jam langsung jalan |
+| `@bot pair @A @B @C @D` | Banyak board sekaligus (A-B, C-D) |
+| `@bot start [BulkID]` | Mulai jam (board terakhir kalau ID kosong) |
+| `@bot cancel [BulkID]` | Batalkan board |
+| `@bot rematch` | Ulang 2 pemain terakhir, warna ditukar |
+| `@bot hasil [BulkID]` | Cek skor game |
+| `@bot boards` | Daftar board aktif di grup |
+| `@bot info @A` | Info pemain (handle Lichess, status verifikasi) |
+| `@bot bantuan` | Daftar semua perintah pairing |
+
+### Klasemen
+| Perintah | Fungsi |
+|---|---|
+| `@bot klasemen` | Tabel Menang/Seri/Kalah + poin (+ Buchholz saat turnamen) |
+| `@bot statistik @A` | Rekap pribadi 1 pemain |
+| `@bot reset klasemen` | Kosongkan klasemen (mulai musim baru) |
+
+### Turnamen (Swiss mini, otomatis)
+| Perintah | Fungsi |
+|---|---|
+| `@bot turnamen @A @B @C @D` | Mulai turnamen (default 1 babak) |
+| `@bot turnamen @A @B @C @D 3 ronde` | Atur jumlah ronde |
+| `@bot turnamen status` | Ronde ke berapa, peserta, klasemen |
+| `@bot turnamen tambah @X` | Tambah peserta (ikut ronde berikutnya) |
+| `@bot turnamen keluar @X` | Keluarkan peserta |
+| `@bot ronde` | Pair ronde berikutnya manual |
+| `@bot turnamen selesai` | Umumkan juara & tutup |
+| `@bot turnamen batal` | Hentikan tanpa umumkan juara |
+| `@bot turnamen riwayat` | Daftar turnamen selesai + juaranya |
+
+**Yang otomatis saat turnamen:**
+- Hasil game diumumkan sendiri saat selesai
+- Ronde berikutnya auto-jalan saat semua papan beres; juara diumumkan di ronde terakhir
+- Bye = +1 poin (kalau peserta ganjil)
+- Tiebreak Buchholz (poin sama -> urut by kekuatan lawan)
+- Reminder kalau game turnamen belum dimulai ~2 menit
+- Aman restart: turnamen tetap lanjut walau bot sempat mati
+
+## 9. Cheat Sheet
 
 Anggota:
 ```
@@ -115,11 +164,28 @@ Anggota:
 !sleep
 ```
 
-Admin:
+Admin (umum):
 ```
 !wake
 !status
 !announcement <teks>
 !sebar info
 !batal
+```
+
+Admin (pairing & turnamen, tag bot):
+```
+@bot pair @A vs @B G5+1 gas
+@bot pair @A @B @C @D
+@bot boards
+@bot hasil
+@bot rematch
+@bot klasemen
+@bot statistik @A
+@bot turnamen @A @B @C @D 3 ronde
+@bot turnamen status
+@bot ronde
+@bot turnamen selesai
+@bot turnamen riwayat
+@bot bantuan
 ```
