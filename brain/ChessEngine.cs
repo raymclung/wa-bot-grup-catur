@@ -66,6 +66,64 @@ static class StockfishEngine
         catch { try { p?.Kill(true); } catch { } return null; }
         finally { p?.Dispose(); }
     }
+
+    /// <summary>Analisa MultiPV: kembalikan N langkah terbaik (urut skor). Result.Best = langkah UCI,
+    /// Result.Pv = garis lanjutan. Kosong kalau gagal.</summary>
+    public static List<Result> AnalyzeMulti(string fen, int multiPv)
+    {
+        var outList = new List<Result>();
+        if (!Available) return outList;
+        Process? p = null;
+        try
+        {
+            p = Process.Start(new ProcessStartInfo(_exe)
+            {
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            if (p is null) return outList;
+            p.StandardInput.WriteLine("uci");
+            p.StandardInput.WriteLine("isready");
+            p.StandardInput.WriteLine("setoption name MultiPV value " + multiPv);
+            p.StandardInput.WriteLine("position fen " + fen);
+            p.StandardInput.WriteLine("go movetime " + _moveTimeMs);
+            p.StandardInput.Flush();
+            var pw = p;
+            _ = Task.Run(async () => { try { await Task.Delay(_moveTimeMs + 6000); if (!pw.HasExited) pw.Kill(true); } catch { } });
+
+            var best = new Dictionary<int, (string mv, string st, int sv, string pv)>();
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < _moveTimeMs + 5000)
+            {
+                string? line = p.StandardOutput.ReadLine();
+                if (line is null) break;
+                if (line.StartsWith("info ") && line.Contains(" multipv ") && line.Contains(" score ") && line.Contains(" pv "))
+                {
+                    var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    int mi = Array.IndexOf(parts, "multipv");
+                    int si = Array.IndexOf(parts, "score");
+                    int pi = Array.IndexOf(parts, "pv");
+                    if (mi >= 0 && si + 2 < parts.Length && pi + 1 < parts.Length)
+                    {
+                        int.TryParse(parts[mi + 1], out int idx);
+                        string st = parts[si + 1]; int.TryParse(parts[si + 2], out int sv);
+                        string pv = string.Join(" ", parts.Skip(pi + 1));   // keep deepest per index
+                        best[idx] = (parts[pi + 1], st, sv, pv);
+                    }
+                }
+                if (line.StartsWith("bestmove")) break;
+            }
+            try { p.StandardInput.WriteLine("quit"); p.StandardInput.Flush(); } catch { }
+            if (!p.WaitForExit(2000)) { try { p.Kill(true); } catch { } }
+            foreach (var kv in best.OrderBy(k => k.Key))
+                if (kv.Value.mv != "(none)") outList.Add(new Result(kv.Value.mv, kv.Value.st, kv.Value.sv, kv.Value.pv));
+            return outList;
+        }
+        catch { try { p?.Kill(true); } catch { } return outList; }
+        finally { p?.Dispose(); }
+    }
 }
 
 /// <summary>Analisa-dari-gambar yang menunggu jawaban giliran (Putih/Hitam). Key = jid|pengirim. TTL 5 menit.</summary>
@@ -127,7 +185,8 @@ static class ChessAnalysis
         if (!StockfishEngine.Available)
             return new Output("Engine analisa belum siap di server.", fen);
 
-        var res = await Task.Run(() => StockfishEngine.Analyze(fen));
+        var lines = await Task.Run(() => StockfishEngine.AnalyzeMulti(fen, 3));
+        var res = lines.Count > 0 ? lines[0] : await Task.Run(() => StockfishEngine.Analyze(fen));
         if (res is null)
             return new Output("Engine tak merespons. Coba lagi sebentar ya.", fen);
 
@@ -140,6 +199,18 @@ static class ChessAnalysis
         string text = $"\U0001F50D *Analisis posisi* ({who} jalan)\n" +
                       $"Langkah terbaik: *{san}*\n" +
                       $"Evaluasi: {eval}";
+        if (pvSan.Length > 0) text += $"\nLanjutan: {pvSan}";
+        if (lines.Count > 1)
+        {
+            var alts = new List<string>();
+            for (int i = 1; i < lines.Count && i < 3; i++)
+            {
+                string s2 = UciToSan(ChessBoard.LoadFromFen(fen), lines[i].Best) ?? Coord(lines[i].Best);
+                string ce = lines[i].ScoreType == "mate" ? $"#{Math.Abs(lines[i].ScoreVal)}" : $"{(lines[i].ScoreVal >= 0 ? "+" : "")}{lines[i].ScoreVal / 100.0:0.0}";
+                alts.Add($"{s2} ({ce})");
+            }
+            if (alts.Count > 0) text += "\nAlternatif: " + string.Join(", ", alts);
+        }
 
         // Penjelasan KATA-KATA dari AI (menjelaskan langkah yang SUDAH pasti benar dari engine -> minim ngarang).
         if (ai is { Enabled: true })

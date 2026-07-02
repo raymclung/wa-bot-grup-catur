@@ -2409,7 +2409,6 @@ public class Program
 								action = "analisa-nomedia"
 							});
 						}
-						try { File.WriteAllBytes(Path.Combine(puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG: tangkap gambar asli utk tuning
 						bool autoFlipped;
 						string placement = BoardVision.RecognizeFenAuto(imgBytes, pieceAssetsDir, out autoFlipped);
 						if (placement == null)
@@ -6288,7 +6287,6 @@ public class Program
 								action = "analisa-nomedia"
 							});
 						}
-						try { File.WriteAllBytes(Path.Combine(cl_472.puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG: tangkap gambar asli utk tuning
 						bool autoFlipped;
 						string placement = BoardVision.RecognizeFenAuto(imgBytes, cl_472.pieceAssetsDir, out autoFlipped);
 						if (placement == null)
