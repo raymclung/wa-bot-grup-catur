@@ -133,6 +133,12 @@ static class PendingAnalysis
     static readonly Dictionary<string, (string placement, DateTime at)> _m = new();
     public static void Set(string key, string placement) { lock (_l) _m[key] = (placement, DateTime.UtcNow); }
     public static bool Has(string key) { lock (_l) { return _m.TryGetValue(key, out var v) && (DateTime.UtcNow - v.at).TotalMinutes <= 5; } }
+
+    // Multi-key: DM bisa datang dgn jid @lid vs @s.whatsapp.net (paKey berubah). Simpan/cek di BEBERAPA
+    // kunci (jid|sender, phone, nomor) supaya balasan giliran tetap tertangkap walau salah satu berubah.
+    public static void SetMany(string placement, params string[] keys) { lock (_l) { var now = DateTime.UtcNow; foreach (var k in keys) if (!string.IsNullOrEmpty(k)) _m[k] = (placement, now); } }
+    public static bool HasAny(params string[] keys) { lock (_l) { var now = DateTime.UtcNow; foreach (var k in keys) if (!string.IsNullOrEmpty(k) && _m.TryGetValue(k, out var v) && (now - v.at).TotalMinutes <= 5) return true; return false; } }
+    public static string? TakeAny(params string[] keys) { lock (_l) { foreach (var k in keys) if (!string.IsNullOrEmpty(k) && _m.TryGetValue(k, out var v)) { _m.Remove(k); if ((DateTime.UtcNow - v.at).TotalMinutes <= 5) return v.placement; } return null; } }
     public static string? Take(string key)
     {
         lock (_l)

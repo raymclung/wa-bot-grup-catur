@@ -806,8 +806,8 @@ public class Program
 					action = "asleep"
 				});
 			}
-			string paKey = cl_278.msg.Jid + "|" + senderNum;
-			if (PendingAnalysis.Has(paKey))
+			string[] paKeys = { cl_278.msg.Jid + "|" + senderNum, "p|" + senderPhone, "n|" + senderNum };
+			if (PendingAnalysis.HasAny(paKeys))
 			{
 				string lowPaRaw = cl_278.msg.Text.Trim().ToLowerInvariant();
 				bool flipPa = lowPaRaw.Contains("balik") || lowPaRaw.Contains("terbalik") || lowPaRaw.Contains("flip");
@@ -848,7 +848,7 @@ public class Program
 				bool? whitePa = flag2;
 				if (whitePa.HasValue)
 				{
-					string placePa = PendingAnalysis.Take(paKey);
+					string placePa = PendingAnalysis.TakeAny(paKeys);
 					if (placePa != null)
 					{
 						if (flipPa) placePa = BoardVision.FlipPlacement(placePa); // sisi Hitam -> putar 180
@@ -2427,7 +2427,7 @@ public class Program
 						}
 						if (!sideGiven)
 						{
-							PendingAnalysis.Set(cl_278.msg.Jid + "|" + senderNum, placement);
+							PendingAnalysis.SetMany(placement, cl_278.msg.Jid + "|" + senderNum, "p|" + senderPhone, "n|" + senderNum);
 							string imgAsk = null;
 							try
 							{
@@ -4737,8 +4737,8 @@ public class Program
 					action = "asleep"
 				});
 			}
-			string paKey = msg.Jid + "|" + senderNum;
-			if (PendingAnalysis.Has(paKey))
+			string[] paKeys = { msg.Jid + "|" + senderNum, "p|" + senderPhone, "n|" + senderNum };
+			if (PendingAnalysis.HasAny(paKeys))
 			{
 				string lowPaRaw = msg.Text.Trim().ToLowerInvariant();
 				bool flipPa = lowPaRaw.Contains("balik") || lowPaRaw.Contains("terbalik") || lowPaRaw.Contains("flip");
@@ -4779,7 +4779,7 @@ public class Program
 				bool? whitePa = flag2;
 				if (whitePa.HasValue)
 				{
-					string placePa = PendingAnalysis.Take(paKey);
+					string placePa = PendingAnalysis.TakeAny(paKeys);
 					if (placePa != null)
 					{
 						if (flipPa) placePa = BoardVision.FlipPlacement(placePa); // sisi Hitam -> putar 180
@@ -6350,7 +6350,7 @@ public class Program
 						}
 						if (!sideGiven)
 						{
-							PendingAnalysis.Set(msg.Jid + "|" + senderNum, placement);
+							PendingAnalysis.SetMany(placement, msg.Jid + "|" + senderNum, "p|" + senderPhone, "n|" + senderNum);
 							string imgAsk = null;
 							try
 							{
