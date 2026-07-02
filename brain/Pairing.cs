@@ -37,6 +37,7 @@ internal static class PairingCommand
 		public bool Rated;
 		public bool Done;   // selesai+diumumkan ATAU dibatalkan -> berhenti dipantau
 		public int Polls;
+		public bool Reminded; // sudah dinudge "game belum dimulai" (sekali saja)
 	}
 
 	private static readonly Dictionary<string, List<Board>> _boards = new Dictionary<string, List<Board>>();
@@ -1124,12 +1125,26 @@ internal static class PairingCommand
 							}
 							await Send(http, outBase, jid, "♟️ Hasil: " + ri.Summary + "\nKetik @bot klasemen untuk peringkat.", null, logger);
 						}
-						else if (b.Polls > 240) // ~3 jam tak selesai -> berhenti pantau
+						else
 						{
-							lock (_lock)
+							// No-show reminder: game belum ada langkah setelah ~2 menit -> nudge sekali.
+							bool notStarted = ri.Ok && ri.Games.Count > 0 && !ri.Games[0].Started && !ri.Games[0].Finished;
+							if (notStarted && b.Polls >= 3 && !b.Reminded && b.WhiteLid.Length > 0 && b.BlackLid.Length > 0)
 							{
-								b.Done = true;
-								SaveBoardsLocked();
+								lock (_lock)
+								{
+									b.Reminded = true;
+									SaveBoardsLocked();
+								}
+								await Send(http, outBase, jid, "⏰ Game belum dimulai, ayo main sebelum waktu habis! " + b.Url + " @" + b.WhiteLid + " @" + b.BlackLid, new string[2] { b.WhiteLid, b.BlackLid }, logger);
+							}
+							if (b.Polls > 240) // ~3 jam tak selesai -> berhenti pantau
+							{
+								lock (_lock)
+								{
+									b.Done = true;
+									SaveBoardsLocked();
+								}
 							}
 						}
 					}

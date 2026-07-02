@@ -65,6 +65,7 @@ internal static class LciClient
 		public string Black = "";
 		public string Score = ""; // "1-0" / "0-1" / "1/2-1/2"
 		public bool Finished;
+		public bool Started; // sudah ada langkah (moves tidak kosong)
 	}
 
 	public sealed class ResultInfo
@@ -213,7 +214,8 @@ internal static class LciClient
 						White = GetStr(g, "white"),
 						Black = GetStr(g, "black"),
 						Score = GetStr(g, "result"),
-						Finished = GetBool(g, "is_finished")
+						Finished = GetBool(g, "is_finished"),
+						Started = GetStr(g, "moves").Trim().Length > 0
 					};
 					info.Games.Add(gr);
 					if (gr.Score.Length > 0)
