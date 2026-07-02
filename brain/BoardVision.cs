@@ -108,7 +108,7 @@ static class BoardVision
         char[,] grid = new char[8, 8];
         for (int r = 0; r < 8; r++)
             for (int c = 0; c < 8; c++)
-                grid[r, c] = Classify(bd, stride, c * S, r * S);
+                grid[r, c] = Classify(bd, stride, c * S, r * S, r != 0 && r != 7); // rank8(r=0)/rank1(r=7): larang pion
 
         var sb = new System.Text.StringBuilder();
         for (int r = 0; r < 8; r++)
@@ -264,7 +264,7 @@ static class BoardVision
         return count;
     }
 
-    static char Classify(byte[] bd, int stride, int x0, int y0)
+    static char Classify(byte[] bd, int stride, int x0, int y0, bool allowPawn = true)
     {
         var (br, bg, bb) = AvgCorners(bd, stride, x0, y0);
         // KOSONG ditentukan dari JUMLAH TINTA (piksel beda jauh dari latar), bukan MAD ke latar.
@@ -276,6 +276,7 @@ static class BoardVision
         long best = long.MaxValue; char bestCh = '.';
         for (int i = 0; i < _pieceBytes!.Length; i++)
         {
+            if (!allowPawn && (_pieceChars![i] == 'P' || _pieceChars![i] == 'p')) continue; // pion mustahil di rank 1/8
             long mad = MadPiece(bd, stride, x0, y0, _pieceBytes[i], br, bg, bb);  // offset-toleran
             if (mad < best) { best = mad; bestCh = _pieceChars![i]; }
         }
