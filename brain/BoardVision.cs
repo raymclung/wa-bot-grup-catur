@@ -42,6 +42,19 @@ static class BoardVision
                 }
                 bl.Add(bmp.Bytes); cl.Add(ch);
             }
+            // Template TAMBAHAN Chess.com (raw BGRA S*S*4 .bin), diekstrak dari board asli.
+            // Dicocokkan bersama cburnett -> papan Lichess & Chess.com sama-sama kebaca (best match menang).
+            string ccDir = Path.Combine(assetsDir, "chesscom");
+            if (Directory.Exists(ccDir))
+            {
+                foreach (var (ch, file) in PieceFiles)
+                {
+                    string bp = Path.Combine(ccDir, file + ".bin");
+                    if (!File.Exists(bp)) continue;
+                    byte[] raw; try { raw = File.ReadAllBytes(bp); } catch { continue; }
+                    if (raw.Length == S * S * 4) { bl.Add(raw); cl.Add(ch); }
+                }
+            }
             // Hanya cache kalau aset benar-benar termuat; jangan kunci array KOSONG permanen
             // (mis. path aset salah saat panggil pertama) -> biar panggilan berikutnya coba lagi.
             if (bl.Count > 0) { _pieceBytes = bl.ToArray(); _pieceChars = cl.ToArray(); }
@@ -199,6 +212,56 @@ static class BoardVision
             flipped = true;
         }
         return placement;
+    }
+
+    public static void ResetCache() { lock (_lock) { _pieceBytes = null; _pieceChars = null; } }
+
+    static readonly System.Collections.Generic.Dictionary<char, string> _fileFor = new()
+    {
+        ['K'] = "wK", ['Q'] = "wQ", ['R'] = "wR", ['B'] = "wB", ['N'] = "wN", ['P'] = "wP",
+        ['k'] = "bK", ['q'] = "bQ", ['r'] = "bR", ['b'] = "bB", ['n'] = "bN", ['p'] = "bP",
+    };
+
+    /// <summary>Ekstrak template bidak dari SATU papan yang posisinya DIKETAHUI (mis. Chess.com neo),
+    /// simpan tiap tipe sbg RAW BGRA (S*S*4) .bin ke outDir. known = (row0=rank8, col0=fileA, char bidak).
+    /// Latar petak dibuat transparan via soft-mask jarak-warna. Return jumlah template ditulis.</summary>
+    public static int ExtractTemplatesFromBoard(byte[] img, string outDir, (int r, int c, char ch)[] known)
+    {
+        using var src0 = SKBitmap.Decode(img);
+        if (src0 is null) return 0;
+        using var src = TrimToBoard(src0);
+        int side = Math.Min(src.Width, src.Height);
+        int ox = (src.Width - side) / 2, oy = (src.Height - side) / 2;
+        var info = new SKImageInfo(8 * S, 8 * S, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+        using var board = new SKBitmap(info);
+        using (var cv = new SKCanvas(board))
+            cv.DrawBitmap(src, new SKRect(ox, oy, ox + side, oy + side), new SKRect(0, 0, 8 * S, 8 * S));
+        byte[] bd = board.Bytes; int stride = 8 * S * 4;
+        Directory.CreateDirectory(outDir);
+        int count = 0;
+        foreach (var (r, c, ch) in known)
+        {
+            if (!_fileFor.TryGetValue(ch, out var fname)) continue;
+            int x0 = c * S, y0 = r * S;
+            var (br, bg, bb) = AvgCorners(bd, stride, x0, y0);
+            byte[] tb = new byte[S * S * 4];
+            for (int j = 0; j < S; j++)
+            {
+                int row = (y0 + j) * stride + x0 * 4;
+                int prow = j * S * 4;
+                for (int i = 0; i < S; i++)
+                {
+                    int o = row + i * 4, po = prow + i * 4;
+                    int B = bd[o], G = bd[o + 1], R = bd[o + 2];
+                    int dist = Math.Abs(B - bb) + Math.Abs(G - bg) + Math.Abs(R - br);
+                    int a = dist * 5; if (a > 255) a = 255;   // dekat warna petak -> transparan
+                    if (i < 4 || i >= S - 4 || j < 4 || j >= S - 4) a = 0;   // buang tepi: label koordinat a-h/1-8 jangan ter-bake
+                    tb[po] = (byte)B; tb[po + 1] = (byte)G; tb[po + 2] = (byte)R; tb[po + 3] = (byte)a;
+                }
+            }
+            try { File.WriteAllBytes(Path.Combine(outDir, fname + ".bin"), tb); count++; } catch { }
+        }
+        return count;
     }
 
     static char Classify(byte[] bd, int stride, int x0, int y0)
