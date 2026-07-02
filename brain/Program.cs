@@ -2410,7 +2410,8 @@ public class Program
 							});
 						}
 						try { File.WriteAllBytes(Path.Combine(puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG: tangkap gambar asli utk tuning
-						string placement = BoardVision.RecognizeFen(imgBytes, pieceAssetsDir);
+						bool autoFlipped;
+						string placement = BoardVision.RecognizeFenAuto(imgBytes, pieceAssetsDir, out autoFlipped);
 						if (placement == null)
 						{
 							await PostJson(http, outBase + "/send", new
@@ -2435,7 +2436,7 @@ public class Program
 							catch
 							{
 							}
-							string ask = "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(papan TERBALIK / dari sisi Hitam? balas mis. *hitam balik*. Bidak salah baca? kirim FEN-nya.)";
+							string ask = (autoFlipped ? "\ud83d\udd04 Papan terdeteksi dari sisi Hitam \u2014 sudah kubalik otomatis.\n" : "") + "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(kalau orientasi masih salah, balas mis. *hitam balik*. Bidak salah baca? kirim FEN-nya.)";
 							if (imgAsk == null)
 							{
 								await PostJson(http, outBase + "/send", new
@@ -6288,7 +6289,8 @@ public class Program
 							});
 						}
 						try { File.WriteAllBytes(Path.Combine(cl_472.puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG: tangkap gambar asli utk tuning
-						string placement = BoardVision.RecognizeFen(imgBytes, cl_472.pieceAssetsDir);
+						bool autoFlipped;
+						string placement = BoardVision.RecognizeFenAuto(imgBytes, cl_472.pieceAssetsDir, out autoFlipped);
 						if (placement == null)
 						{
 							await PostJson(cl_472.http, outBase + "/send", new
@@ -6313,7 +6315,7 @@ public class Program
 							catch
 							{
 							}
-							string ask = "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(papan TERBALIK / dari sisi Hitam? balas mis. *hitam balik*. Bidak salah baca? kirim FEN-nya.)";
+							string ask = (autoFlipped ? "\ud83d\udd04 Papan terdeteksi dari sisi Hitam \u2014 sudah kubalik otomatis.\n" : "") + "\ud83d\udcf7 Ini posisi yang kubaca. *Giliran siapa?* Balas *Putih* atau *Hitam*.\n(kalau orientasi masih salah, balas mis. *hitam balik*. Bidak salah baca? kirim FEN-nya.)";
 							if (imgAsk == null)
 							{
 								await PostJson(cl_472.http, outBase + "/send", new

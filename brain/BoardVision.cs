@@ -165,6 +165,42 @@ static class BoardVision
         return outSb.ToString();
     }
 
+    /// <summary>Skor arah bidak: rata-rata rank bidak Putih - rata-rata rank bidak Hitam.
+    /// Bidak Putih tak bisa mundur, normalnya di bawah (rank kecil) -> skor negatif.
+    /// Skor jelas positif = papan kemungkinan terbalik (perspektif Hitam).</summary>
+    public static double PawnDirectionScore(string placement)
+    {
+        string[] rows = placement.Split('/');
+        double wSum = 0, bSum = 0; int wN = 0, bN = 0;
+        for (int r = 0; r < rows.Length && r < 8; r++)
+        {
+            int rank = 8 - r;
+            foreach (char c in rows[r])
+            {
+                if (char.IsDigit(c)) continue;
+                if (c == 'P') { wSum += rank; wN++; }
+                else if (c == 'p') { bSum += rank; bN++; }
+            }
+        }
+        if (wN == 0 || bN == 0) return 0.0;   // tak bisa putuskan
+        return (wSum / wN) - (bSum / bN);
+    }
+
+    /// <summary>Kenali papan lalu auto-benarkan orientasi via arah bidak.
+    /// flipped=true kalau papan dibalik (terdeteksi dari sisi Hitam).</summary>
+    public static string RecognizeFenAuto(byte[] img, string assetsDir, out bool flipped)
+    {
+        flipped = false;
+        string placement = RecognizeFen(img, assetsDir, false);
+        if (placement == null) return null;
+        if (PawnDirectionScore(placement) > 0.5)   // bidak Putih jelas di atas Hitam -> terbalik
+        {
+            placement = FlipPlacement(placement);
+            flipped = true;
+        }
+        return placement;
+    }
+
     static char Classify(byte[] bd, int stride, int x0, int y0)
     {
         var (br, bg, bb) = AvgCorners(bd, stride, x0, y0);
