@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  Smoke test terisolasi untuk BRAIN.
 //  - Menyalakan MOCK GATEWAY (menangkap semua /send /delete dll).
 //  - Menyalakan INSTANCE BRAIN UJI sendiri (port 5099, config & data terpisah,
@@ -29,7 +29,7 @@ mkdirSync(join(TESTROOT, 'config'), { recursive: true });
 mkdirSync(join(TESTROOT, 'data'), { recursive: true });
 mkdirSync(join(TESTROOT, 'logs'), { recursive: true });
 copyFileSync(join(ROOT, 'brain', 'config', 'rules.json'), join(TESTROOT, 'config', 'rules.json'));
-// Pool puzzle kecil (2 dari pool asli) + aset bidak — agar uji puzzle/reveal merender gambar betulan.
+// Pool puzzle kecil (2 dari pool asli) + aset bidak - agar uji puzzle/reveal merender gambar betulan.
 try {
   const pool = JSON.parse(readFileSync(join(ROOT, 'brain', 'data', 'puzzles.json'), 'utf8'));
   writeFileSync(join(TESTROOT, 'data', 'puzzles.json'), JSON.stringify(pool.slice(0, 2)));
@@ -63,6 +63,7 @@ const testConfig = {
   // puzzle on-demand aktif; groupJids kosong supaya loop harian tak ikut posting saat test.
   puzzle: { enabled: true, commandEnabled: true, command: 'puzzle', solveCommand: 'solusi', solveAfterMinutes: 0, revealMinutes: 60, dailyHour: 8, groupJids: [] },
   privateChat: { enabled: true, persona: 'test dm', allowedNumbers: ['628111'], consoleGroupJids: [] },
+  dmAdmins: ['628111'],
 };
 writeFileSync(join(TESTROOT, 'config', 'config.json'), JSON.stringify(testConfig, null, 2));
 
@@ -77,6 +78,7 @@ const mock = http.createServer(async (req, res) => {
   let parsed = null; try { parsed = body ? JSON.parse(body) : null; } catch {}
   captured.push({ url: req.url, body: parsed });
   if (req.url === '/health') { res.writeHead(200); return res.end(JSON.stringify({ ok: true, connected: true })); }
+  if (req.url.startsWith('/groups')) { res.writeHead(200); return res.end(JSON.stringify({ ok: true, groups: [{ jid: 'testgrp@g.us', subject: 'Smoke Test Group' }, { jid: 'hub@g.us', subject: 'Smoke Hub' }] })); }
   if (req.url.startsWith('/group-members')) { res.writeHead(200); return res.end(JSON.stringify({ ok: true, members: [] })); }
   // Gagal TERUS untuk jid tertentu (uji item bertahan di disk lintas restart).
   if (req.url === '/send' && parsed?.jid === failAlwaysFor) { res.writeHead(503); return res.end('{"ok":false,"error":"down"}'); }
@@ -203,6 +205,29 @@ check('DM admin allowlist -> kirim balasan', sentTo('628111@s.whatsapp.net'), JS
 r = await inc({ jid: '628999@s.whatsapp.net', participant: '628999@s.whatsapp.net', participantPhone: '628999', text: 'jadwal' });
 check('DM non-allowlist -> dm-not-allowed', r.json?.action === 'dm-not-allowed', r.json?.action);
 
+// 13b. admin DM console commands baru
+captured.length = 0;
+r = await inc({ jid: '628111@s.whatsapp.net', participant: '628111@s.whatsapp.net', participantPhone: '628111', text: 'status bot' });
+await sleep(500);
+check('DM admin status bot -> brain online', sentTo('628111@s.whatsapp.net', 'Brain online'), JSON.stringify(captured));
+captured.length = 0;
+r = await inc({ jid: '628111@s.whatsapp.net', participant: '628111@s.whatsapp.net', participantPhone: '628111', text: 'tidur bot' });
+await sleep(500);
+check('DM admin tidur bot -> preview konfirmasi', sentTo('628111@s.whatsapp.net', 'Yakin tidurkan bot'), JSON.stringify(captured));
+captured.length = 0;
+r = await inc({ jid: '628111@s.whatsapp.net', participant: '628111@s.whatsapp.net', participantPhone: '628111', text: 'pending' });
+await sleep(500);
+check('DM admin pending -> ringkasan', sentTo('628111@s.whatsapp.net', 'Pending PM'), JSON.stringify(captured));
+captured.length = 0;
+r = await inc({ jid: '628111@s.whatsapp.net', participant: '628111@s.whatsapp.net', participantPhone: '628111', text: 'batal' });
+await sleep(500);
+check('DM admin batal pending -> dibatalkan', sentTo('628111@s.whatsapp.net', 'dibatalkan'), JSON.stringify(captured));
+captured.length = 0;
+r = await inc({ jid: '628111@s.whatsapp.net', participant: '628111@s.whatsapp.net', participantPhone: '628111', text: 'puzzle mudah ke Smoke Test Group' });
+await sleep(500);
+check('DM admin puzzle ke grup -> preview', sentTo('628111@s.whatsapp.net', 'Preview puzzle siap'), JSON.stringify(captured));
+await inc({ jid: '628111@s.whatsapp.net', participant: '628111@s.whatsapp.net', participantPhone: '628111', text: 'batal' });
+
 // 14. puzzle on-demand -> render & kirim gambar papan
 captured.length = 0;
 r = await inc({ jid: 'testgrp@g.us', participant: '628222@s.whatsapp.net', text: '!puzzle' });
@@ -248,4 +273,6 @@ async function cleanup() {
   await sleep(300);
   try { rmSync(TESTROOT, { recursive: true, force: true }); } catch {}
 }
+
+
 

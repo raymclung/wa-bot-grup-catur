@@ -42,6 +42,13 @@ internal static class PairingCommand
 	private static readonly Dictionary<string, List<Board>> _boards = new Dictionary<string, List<Board>>();
 
 	private static volatile bool _pollerStarted = false;
+	private static bool _boardsLoaded = false;
+
+	private static string DataDir => Path.Combine(Directory.GetCurrentDirectory(), "data");
+
+	private static string BoardsPath => Path.Combine(DataDir, "pairing-boards.json");
+
+	private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true };
 
 	private static readonly Regex GpRx = new Regex("g?\\s*(\\d{1,3})\\s*\\+\\s*(\\d{1,2})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 	private static readonly Regex MenitRx = new Regex("(\\d{1,3})\\s*menit", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -61,6 +68,7 @@ internal static class PairingCommand
 		}
 		try
 		{
+		EnsureBoardsLoaded(logger);
 		string t = (msg.Text ?? "").ToLowerInvariant();
 		string bulkArg = ExtractBulkId(msg.Text ?? "");
 		bool isPair = t.Contains("pair") || t.Contains("pasang");
@@ -630,6 +638,79 @@ internal static class PairingCommand
 		}
 	}
 
+	private static void EnsureBoardsLoaded(ILogger logger)
+	{
+		lock (_lock)
+		{
+			if (_boardsLoaded)
+			{
+				return;
+			}
+			_boardsLoaded = true;
+			try
+			{
+				if (!File.Exists(BoardsPath))
+				{
+					return;
+				}
+				Dictionary<string, List<Board>>? loaded = JsonSerializer.Deserialize<Dictionary<string, List<Board>>>(File.ReadAllText(BoardsPath), JsonOptions);
+				if (loaded == null)
+				{
+					return;
+				}
+				_boards.Clear();
+				foreach (KeyValuePair<string, List<Board>> kv in loaded)
+				{
+					_boards[kv.Key] = kv.Value ?? new List<Board>();
+				}
+			}
+			catch (Exception ex)
+			{
+				logger.LogWarning("load pairing boards gagal: {Msg}", ex.Message);
+			}
+		}
+	}
+
+	private static void SaveBoardsLocked()
+	{
+		try
+		{
+			Directory.CreateDirectory(DataDir);
+			File.WriteAllText(BoardsPath, JsonSerializer.Serialize(_boards, JsonOptions));
+		}
+		catch
+		{
+		}
+	}
+
+	public static void ResumePoller(AppConfig config, HttpClient http, ILogger logger)
+	{
+		EnsureBoardsLoaded(logger);
+		bool hasActive = false;
+		lock (_lock)
+		{
+			foreach (KeyValuePair<string, List<Board>> kv in _boards)
+			{
+				foreach (Board b in kv.Value)
+				{
+					if (!b.Done)
+					{
+						hasActive = true;
+						break;
+					}
+				}
+				if (hasActive)
+				{
+					break;
+				}
+			}
+		}
+		if (hasActive)
+		{
+			EnsurePoller(config, http, ChannelRoute.Base(config, "whatsapp"), logger);
+		}
+	}
+
 	private static void ParseTime(string t, out int limitSec, out int incSec)
 	{
 		Match g = GpRx.Match(t);
@@ -729,6 +810,7 @@ internal static class PairingCommand
 				_boards[jid] = list;
 			}
 			list.Add(new Board { BulkId = bulkId, White = white, Black = black, WhiteHandle = whiteHandle, BlackHandle = blackHandle, WhiteLid = whiteLid, BlackLid = blackLid, Url = url, LimitSec = limitSec, IncSec = incSec, Rated = rated });
+			SaveBoardsLocked();
 		}
 	}
 
@@ -947,6 +1029,7 @@ internal static class PairingCommand
 					if (b.BulkId == bulkId)
 					{
 						b.Done = true;
+						SaveBoardsLocked();
 					}
 				}
 			}
@@ -995,6 +1078,7 @@ internal static class PairingCommand
 							lock (_lock)
 							{
 								b.Done = true;
+								SaveBoardsLocked();
 							}
 							if (ri.Games.Count > 0)
 							{
@@ -1007,6 +1091,7 @@ internal static class PairingCommand
 							lock (_lock)
 							{
 								b.Done = true;
+								SaveBoardsLocked();
 							}
 						}
 					}
@@ -1025,26 +1110,87 @@ internal static class PairingCommand
 	{
 		try
 		{
-			string[] mentions = Array.Empty<string>();
-			if (mentionLids != null)
+			List<string> lids = NormalizeMentionLids(mentionLids);
+			if (lids.Count <= 5)
 			{
-				List<string> mj = new List<string>();
-				foreach (string l in mentionLids)
-				{
-					if (!string.IsNullOrEmpty(l))
-					{
-						mj.Add(l + "@lid");
-					}
-				}
-				mentions = mj.ToArray();
+				await SendRaw(http, outBase, jid, text, ToMentionJids(lids), logger);
+				return;
 			}
-			object body = new { jid, text, mentions };
-			using StringContent content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-			await http.PostAsync(outBase + "/send", content);
+
+			await SendRaw(http, outBase, jid, StripMentionBurst(text), Array.Empty<string>(), logger);
+			for (int i = 0; i < lids.Count; i += 5)
+			{
+				List<string> chunk = lids.GetRange(i, Math.Min(5, lids.Count - i));
+				StringBuilder sb = new StringBuilder("Tag pemain:");
+				foreach (string lid in chunk)
+				{
+					sb.Append(" @").Append(lid);
+				}
+				await SendRaw(http, outBase, jid, sb.ToString(), ToMentionJids(chunk), logger);
+			}
 		}
 		catch (Exception ex)
 		{
 			logger.LogWarning("pair send gagal: {Msg}", ex.Message);
 		}
 	}
+
+	private static List<string> NormalizeMentionLids(string[]? mentionLids)
+	{
+		List<string> lids = new List<string>();
+		if (mentionLids == null)
+		{
+			return lids;
+		}
+		foreach (string raw in mentionLids)
+		{
+			string lid = (raw ?? "").Trim();
+			if (lid.EndsWith("@lid", StringComparison.OrdinalIgnoreCase))
+			{
+				lid = lid.Substring(0, lid.Length - 4);
+			}
+			if (lid.Length > 0 && !lids.Contains(lid))
+			{
+				lids.Add(lid);
+			}
+		}
+		return lids;
+	}
+
+	private static string[] ToMentionJids(List<string> lids)
+	{
+		string[] mentions = new string[lids.Count];
+		for (int i = 0; i < lids.Count; i++)
+		{
+			mentions[i] = lids[i] + "@lid";
+		}
+		return mentions;
+	}
+
+	private static string StripMentionBurst(string text)
+	{
+		string t = text ?? "";
+		string cleaned = Regex.Replace(t, @"(?im)^\s*(Main yuk|Tag pemain:)\s+@[^\r\n]+!?\s*$", "").TrimEnd();
+		return cleaned.Length > 0 ? cleaned : t;
+	}
+
+	private static async Task SendRaw(HttpClient http, string outBase, string jid, string text, string[] mentions, ILogger logger)
+	{
+		object body = new { jid, text, mentions };
+		using StringContent content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+		using HttpResponseMessage resp = await http.PostAsync(outBase + "/send", content);
+		if (!resp.IsSuccessStatusCode)
+		{
+			logger.LogWarning("pair send status: {Status}", (int)resp.StatusCode);
+		}
+	}
+
+
+
+
+
+
 }
+
+
+

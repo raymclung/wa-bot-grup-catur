@@ -3812,6 +3812,7 @@ public class Program
 		cl_472.puzzlePool = LoadPuzzlePool(Path.Combine(text2, "puzzles.json"), cl_472.app.Logger);
 			AliasStore.Init(Path.Combine(text2, "aliases.json"));
 			TagAliasStore.Init(Path.Combine(text2, "tag-aliases.json"));
+			PairingCommand.ResumePoller(cl_472.config, cl_472.http, cl_472.app.Logger);
 		cl_472.activePuzzles = LoadActivePuzzles(cl_472.activePuzzlePath);
 		cl_472.puzzleByMsg = new Dictionary<string, ActivePuzzle>();
 		foreach (ActivePuzzle value in cl_472.activePuzzles.Values)
@@ -7516,11 +7517,41 @@ public class Program
 			audit.WriteAdminDm(admin, "status", "dm", "ok", raw);
 			return status;
 		}
-				if ((low == "audit terakhir" || low == "log terakhir") && isAdmin)
+		if ((low == "pending" || low == "cek pending") && isAdmin)
+		{
+			audit.WriteAdminDm(admin, "pending", "dm", "ok", raw);
+			return BuildDmPendingSummary(key);
+		}
+		if ((low == "batal semua" || low == "cancel semua") && isAdmin)
+		{
+			bool removed;
+			lock (DmAnnounceLock) removed = DmAnnouncePending.Remove(key);
+			audit.WriteAdminDm(admin, "pending-clear", "dm", removed ? "ok" : "empty", raw);
+			return removed ? "Semua pending PM kamu sudah dibatalkan." : "Tidak ada pending PM.";
+		}
+		if (Regex.IsMatch(low, "^(jadwal|jadwal\\s+malam\\s+ini|next|turnamen)$", RegexOptions.CultureInvariant) && isAdmin)
+		{
+			string sched = await CommandHandler.BuildSchedule(config, http, logger);
+			audit.WriteAdminDm(admin, "schedule", "dm", "ok", raw);
+			return sched;
+		}
+		if (Regex.IsMatch(low, "^(standings|klasemen)(\\s+.*)?$", RegexOptions.CultureInvariant) && isAdmin)
+		{
+			string standings = await BuildDmStandings(raw, http, logger);
+			audit.WriteAdminDm(admin, "standings", "dm", "ok", raw);
+			return standings;
+		}
+		if (Regex.IsMatch(low, "^(hasil|result|hasil\\s+turnamen\\s+terakhir|hasil\\s+terakhir)(\\s+.*)?$", RegexOptions.CultureInvariant) && isAdmin)
+		{
+			string result = await BuildDmResult(config, raw, http, logger);
+			audit.WriteAdminDm(admin, "result", "dm", "ok", raw);
+			return result;
+		}
+		if ((low == "audit terakhir" || low == "log terakhir") && isAdmin)
 		{
 			List<string> lines = audit.Tail(10);
 			audit.WriteAdminDm(admin, "audit-tail", "dm", "ok", raw);
-			return lines.Count == 0 ? "Audit masih kosong." : ("Audit terakhir:\n" + string.Join("\n", lines));
+			return FormatAuditTail(lines);
 		}
 		if ((low == "puzzle aktif" || low == "cek puzzle aktif") && isAdmin)
 		{
@@ -7530,9 +7561,12 @@ public class Program
 		}
 		if ((low == "tidur bot" || low == "bot tidur") && isAdmin)
 		{
-			audit.WriteAdminDm(admin, "sleep", "dm", "ok", raw);
-			_ = Task.Run(async delegate { await Task.Delay(1500); Sleeper.Set(true); });
-			return "Baik, saya tidur dulu. Bangunkan dengan *bangun bot*.";
+			lock (DmAnnounceLock)
+			{
+				DmAnnouncePending[key] = new DmAnnouncementPending { Kind = "sleep", TargetName = "bot", TargetJid = "dm", Text = "tidur bot", CreatedAt = DateTimeOffset.UtcNow };
+			}
+			audit.WriteAdminDm(admin, "sleep-preview", "dm", "preview", raw);
+			return "Yakin tidurkan bot? Balas *ya tidur* untuk lanjut, atau *batal*.";
 		}
 		if ((low == "bangun bot" || low == "bot bangun") && isAdmin)
 		{
@@ -7544,8 +7578,9 @@ public class Program
 		if (aliasSet.Success && isAdmin)
 		{
 			string aliasKey = aliasSet.Groups[1].Value.Trim();
-			GroupOption? target = await ResolveOneGroup(config, http, aliasSet.Groups[2].Value.Trim().Trim('"'));
-			if (target == null) return "Grup tidak ketemu atau ambigu. Perjelas namanya.";
+			string aliasTargetName = aliasSet.Groups[2].Value.Trim().Trim('"');
+			GroupOption? target = await ResolveOneGroup(config, http, aliasTargetName);
+			if (target == null) return await DescribeGroupResolutionFailure(config, http, aliasTargetName);
 			AliasStore.Set(aliasKey, target.Subject);
 			audit.WriteAdminDm(admin, "alias-set", target.Subject, "ok", aliasKey);
 			return "Alias tersimpan: " + aliasKey + " = " + target.Subject;
@@ -7588,10 +7623,15 @@ public class Program
 				audit.WriteAdminDm(admin, pending.Kind, pending.TargetName, "cancel", pending.Text);
 				return "Siap, dibatalkan.";
 			}
-			if (low == "ya" || low == "y" || low == "kirim" || low == "gas" || low == "ok" || low == "oke")
+			if (low == "ya" || low == "y" || low == "kirim" || low == "gas" || low == "ok" || low == "oke" || low == "ya tidur")
 			{
 				bool sent = false;
-				if (pending.Kind == "puzzle")
+				if (pending.Kind == "sleep")
+				{
+					sent = true;
+					_ = Task.Run(async delegate { await Task.Delay(1500); Sleeper.Set(true); });
+				}
+				else if (pending.Kind == "puzzle")
 				{
 					sent = await sendPuzzle(pending.TargetJid, pending.Level);
 				}
@@ -7607,7 +7647,7 @@ public class Program
 				}
 				lock (DmAnnounceLock) DmAnnouncePending.Remove(key);
 				audit.WriteAdminDm(admin, pending.Kind, pending.TargetName, sent ? "ok" : "failed", pending.Text);
-				if (sent) return pending.Kind == "puzzle" ? ("Puzzle terkirim ke \"" + pending.TargetName + "\".") : pending.Kind == "delete-last" ? ("Pesan terakhir di \"" + pending.TargetName + "\" sudah dihapus.") : ("Terkirim ke \"" + pending.TargetName + "\".");
+				if (sent) return pending.Kind == "sleep" ? "Baik, saya tidur dulu. Bangunkan dengan *bangun bot*." : pending.Kind == "puzzle" ? ("Puzzle terkirim ke \"" + pending.TargetName + "\".") : pending.Kind == "delete-last" ? ("Pesan terakhir di \"" + pending.TargetName + "\" sudah dihapus.") : ("Terkirim ke \"" + pending.TargetName + "\".");
 				return "Gagal menjalankan aksi untuk \"" + pending.TargetName + "\". Coba lagi sebentar.";
 			}
 			return "Masih ada preview. Balas *ya* untuk lanjut, atau *batal*.";
@@ -7627,8 +7667,9 @@ public class Program
 		Match solusi = Regex.Match(raw, "^solusi\\s+puzzle\\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 		if (solusi.Success)
 		{
-			GroupOption? target = await ResolveOneGroup(config, http, solusi.Groups[1].Value.Trim().Trim('\"'));
-			if (target == null) return "Grup tidak ketemu atau ambigu. Perjelas namanya.";
+			string solusiTargetName = solusi.Groups[1].Value.Trim().Trim('\"');
+			GroupOption? target = await ResolveOneGroup(config, http, solusiTargetName);
+			if (target == null) return await DescribeGroupResolutionFailure(config, http, solusiTargetName);
 			bool ok = await revealPuzzle(target.Jid);
 			audit.WriteAdminDm(admin, "solusi-puzzle", target.Subject, ok ? "ok" : "no-active-puzzle", raw);
 			return ok ? ("Solusi puzzle dikirim ke \"" + target.Subject + "\".") : ("Tidak ada puzzle aktif di \"" + target.Subject + "\".");
@@ -7636,8 +7677,9 @@ public class Program
 		Match del = Regex.Match(raw, "^hapus\\s+pesan\\s+terakhir(?:\\s+spam)?\\s+(?:di|dari)\\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 		if (del.Success)
 		{
-			GroupOption? target = await ResolveOneGroup(config, http, del.Groups[1].Value.Trim().Trim('\"'));
-			if (target == null) return "Grup tidak ketemu atau ambigu. Perjelas namanya.";
+			string delTargetName = del.Groups[1].Value.Trim().Trim('\"');
+			GroupOption? target = await ResolveOneGroup(config, http, delTargetName);
+			if (target == null) return await DescribeGroupResolutionFailure(config, http, delTargetName);
 			DmAnnouncementPending? p = await BuildDeleteLastPending(config, http, target);
 			if (p == null) return "Saya belum menemukan pesan terakhir yang bisa dihapus di \"" + target.Subject + "\".";
 			lock (DmAnnounceLock) DmAnnouncePending[key] = p;
@@ -7669,6 +7711,80 @@ public class Program
 		return null;
 	}
 
+	internal static string BuildDmPendingSummary(string key)
+	{
+		lock (DmAnnounceLock)
+		{
+			if (!DmAnnouncePending.TryGetValue(key, out DmAnnouncementPending? p) || p == null)
+			{
+				return "Tidak ada pending PM.";
+			}
+			int age = Math.Max(0, (int)(DateTimeOffset.UtcNow - p.CreatedAt).TotalMinutes);
+			string target = string.IsNullOrWhiteSpace(p.TargetName) ? "dm" : p.TargetName;
+			return "Pending PM:\n- aksi: " + p.Kind + "\n- tujuan: " + target + "\n- umur: " + age.ToString(CultureInfo.InvariantCulture) + " menit\n\nBalas *ya* untuk lanjut, atau *batal*.";
+		}
+	}
+
+	internal static string FormatAuditTail(List<string> lines)
+	{
+		if (lines == null || lines.Count == 0)
+		{
+			return "Audit masih kosong.";
+		}
+		List<string> rows = new List<string>();
+		foreach (string line in lines.Take(10))
+		{
+			string clean = Regex.Replace(line ?? "", "\\s*\\|\\s*teks=\".*\"$", "").Trim();
+			rows.Add("- " + clean);
+		}
+		return "Audit terakhir:\n" + string.Join("\n", rows);
+	}
+
+	internal static async Task<string> BuildDmStandings(string raw, HttpClient http, ILogger logger)
+	{
+		Match id = Regex.Match(raw ?? "", "\\b(\\d{3,})\\b", RegexOptions.CultureInvariant);
+		if (id.Success && int.TryParse(id.Groups[1].Value, out int tid))
+		{
+			return await CommandHandler.BuildStandings(tid, http, logger);
+		}
+		List<(string url, string swiss, string name, string date)> recent = await CommandHandler.GetRecentTournaments(http, logger, 5);
+		if (recent.Count == 0)
+		{
+			return "Daftar turnamen belum terbaca. Coba standings <id>.";
+		}
+		var t = recent[0];
+		return await CommandHandler.BuildStandingsSmart(t.url, t.swiss, t.name, http, logger);
+	}
+
+	internal static async Task<string> BuildDmResult(AppConfig config, string raw, HttpClient http, ILogger logger)
+	{
+		Match id = Regex.Match(raw ?? "", "\\b(\\d{3,})\\b", RegexOptions.CultureInvariant);
+		if (id.Success && int.TryParse(id.Groups[1].Value, out int tid))
+		{
+			return await CommandHandler.BuildResult(tid, http, logger);
+		}
+		return await CommandHandler.BuildLatestResult(config, http, logger);
+	}
+
+	internal static async Task<string> DescribeGroupResolutionFailure(AppConfig config, HttpClient http, string groupName)
+	{
+		string name = groupName;
+		string? alias = AliasStore.Get(name);
+		if (!string.IsNullOrEmpty(alias)) name = alias;
+		List<GroupOption> matches = MatchGroups(await FetchGroups(config.GatewayUrl, http), name);
+		if (matches.Count == 0)
+		{
+			return "Grup tidak ketemu. Cek nama atau buat alias dulu.";
+		}
+		StringBuilder sb = new StringBuilder("Nama grup ambigu. Pilih yang lebih spesifik:\n");
+		int max = Math.Min(5, matches.Count);
+		for (int i = 0; i < max; i++)
+		{
+			sb.Append(i + 1).Append(". ").Append(matches[i].Subject).Append('\n');
+		}
+		sb.Append("\nUlangi command dengan nama lengkapnya.");
+		return sb.ToString().TrimEnd();
+	}
 	internal static bool IsDmAdmin(AppConfig config, string senderNum, string senderPhone)
 	{
 		string[] admins = config.DmAdmins ?? Array.Empty<string>();
@@ -7678,12 +7794,12 @@ public class Program
 
 	internal static bool LooksDmAdminCommand(string raw)
 	{
-		return Regex.IsMatch(raw ?? "", "^(kirim|umumkan|pengumuman|pair|pairing|puzzle|solusi\\s+puzzle|hapus\\s+pesan|buat\\s+pengumuman|audit|log|alias|template|ingatkan|tidur\\s+bot|bangun\\s+bot|bot\\s+tidur|bot\\s+bangun)\\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+		return Regex.IsMatch(raw ?? "", "^(kirim|umumkan|pengumuman|pair|pairing|puzzle|solusi\\s+puzzle|hapus\\s+pesan|buat\\s+pengumuman|audit|log|alias|template|ingatkan|tidur\\s+bot|bangun\\s+bot|bot\\s+tidur|bot\\s+bangun|jadwal|next|turnamen|standings|klasemen|hasil|result|pending|cek\\s+pending|batal\\s+semua|cancel\\s+semua)\\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 	}
 
 	internal static string DmAdminHelp()
 	{
-		return "Bisa, ini format PM admin:\n- status bot\n- kirim ke LCI: teks\n- pair user1 vs user2 G5+3 casual link ke LCI\n- puzzle mudah ke LCI\n- solusi puzzle LCI\n- buat pengumuman Bendino malam ini\n- hapus pesan terakhir di LCI\n- audit terakhir\n- alias LCI = Liga Catur Indonesia\n- puzzle aktif\n- template Bendino\n- ingatkan ade21h vs Mikaysr ke LCI\n- tidur bot / bangun bot";
+		return "Bisa, ini format PM admin:\n- status bot\n- pending / batal semua\n- jadwal malam ini\n- standings LCI\n- hasil terakhir\n- kirim ke LCI: teks\n- pair user1 vs user2 G5+3 casual link ke LCI\n- puzzle mudah ke LCI\n- solusi puzzle LCI\n- buat pengumuman Bendino malam ini\n- hapus pesan terakhir di LCI\n- audit terakhir\n- alias LCI = Liga Catur Indonesia\n- puzzle aktif\n- template Bendino\n- ingatkan ade21h vs Mikaysr ke LCI\n- tidur bot / bangun bot";
 	}
 
 	internal static async Task<GroupOption?> ResolveOneGroup(AppConfig config, HttpClient http, string groupName)
@@ -7719,7 +7835,7 @@ public class Program
 	internal static async Task<string> PrepareDmPending(AppConfig config, HttpClient http, string key, string groupName, string kind, string body, string level, string title, ILogger logger, AuditLog audit, string admin)
 	{
 		GroupOption? target = await ResolveOneGroup(config, http, groupName);
-		if (target == null) return "Grup tidak ketemu atau ambigu. Perjelas namanya.";
+		if (target == null) return await DescribeGroupResolutionFailure(config, http, groupName);
 		lock (DmAnnounceLock)
 		{
 			DmAnnouncePending[key] = new DmAnnouncementPending { TargetJid = target.Jid, TargetName = target.Subject, Text = body, Kind = kind, Level = level, CreatedAt = DateTimeOffset.UtcNow };
@@ -12190,3 +12306,14 @@ internal static class ConfigStore
 		return list;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
