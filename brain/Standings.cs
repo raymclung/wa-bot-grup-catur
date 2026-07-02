@@ -22,6 +22,7 @@ internal static class PairingStandings
 	private sealed class Rec
 	{
 		public string Name { get; set; } = "";
+		public string Handle { get; set; } = ""; // key (handle Lichess) untuk hitung Buchholz
 		public int W { get; set; }
 		public int D { get; set; }
 		public int L { get; set; }
@@ -137,6 +138,7 @@ internal static class PairingStandings
 			r = new Rec { Name = name };
 			g[key] = r;
 		}
+		r.Handle = key;
 		if (name.Length > 0)
 		{
 			r.Name = name; // selalu pakai nama tampilan terbaru
@@ -145,7 +147,7 @@ internal static class PairingStandings
 	}
 
 	// Tabel klasemen untuk satu grup (string siap kirim). "" -> belum ada.
-	public static string Format(string jid)
+	public static string Format(string jid, Dictionary<string, List<string>>? opponents = null)
 	{
 		lock (_lk)
 		{
@@ -155,6 +157,27 @@ internal static class PairingStandings
 				return "Belum ada hasil tercatat di grup ini.";
 			}
 			List<Rec> rows = new List<Rec>(g.Values);
+			// Buchholz (tiebreak): jumlah poin semua lawan. Hanya kalau data lawan diberikan (konteks turnamen).
+			bool useBuch = opponents != null && opponents.Count > 0;
+			Dictionary<string, double> buch = new Dictionary<string, double>();
+			if (useBuch)
+			{
+				foreach (Rec rr in rows)
+				{
+					double bh = 0.0;
+					if (opponents!.TryGetValue(rr.Handle, out List<string>? opps) && opps != null)
+					{
+						foreach (string o in opps)
+						{
+							if (g.TryGetValue(o, out Rec? orec) && orec != null)
+							{
+								bh += Points(orec);
+							}
+						}
+					}
+					buch[rr.Handle] = bh;
+				}
+			}
 			rows.Sort(delegate (Rec a, Rec b)
 			{
 				double pa = Points(a);
@@ -163,6 +186,15 @@ internal static class PairingStandings
 				{
 					return pb.CompareTo(pa);
 				}
+				if (useBuch)
+				{
+					double ba = buch.TryGetValue(a.Handle, out double av) ? av : 0.0;
+					double bb = buch.TryGetValue(b.Handle, out double bv) ? bv : 0.0;
+					if (bb != ba)
+					{
+						return bb.CompareTo(ba);
+					}
+				}
 				return b.W.CompareTo(a.W);
 			});
 			StringBuilder sb = new StringBuilder("🏆 Klasemen:\n");
@@ -170,7 +202,8 @@ internal static class PairingStandings
 			foreach (Rec r in rows)
 			{
 				string byeTxt = (r.B > 0) ? ("/" + r.B + "B") : "";
-				sb.Append(i + ". " + r.Name + " — " + Pts(Points(r)) + " poin (" + r.W + "M/" + r.D + "S/" + r.L + "K" + byeTxt + ")\n");
+				string bhTxt = useBuch ? (" · BH " + Pts(buch.TryGetValue(r.Handle, out double bhv) ? bhv : 0.0)) : "";
+				sb.Append(i + ". " + r.Name + " — " + Pts(Points(r)) + " poin (" + r.W + "M/" + r.D + "S/" + r.L + "K" + byeTxt + ")" + bhTxt + "\n");
 				i++;
 			}
 			return sb.ToString().TrimEnd();

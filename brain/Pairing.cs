@@ -214,7 +214,7 @@ internal static class PairingCommand
 				return "turnamen-status-none";
 			}
 			StringBuilder sbst = new StringBuilder("🏆 Status Turnamen\nRonde " + sts.Round + "/" + sts.TotalRounds + " · " + sts.Players.Count + " pemain · G" + (sts.LimitSec / 60) + "+" + sts.IncSec + " unrated\n\n");
-			sbst.Append(PairingStandings.Format(msg.Jid));
+			sbst.Append(PairingStandings.Format(msg.Jid, BuildOpponents(msg.Jid)));
 			await Send(http, outBase, msg.Jid, sbst.ToString(), null, logger);
 			return "turnamen-status";
 		}
@@ -367,7 +367,7 @@ internal static class PairingCommand
 		// ===== KLASEMEN =====  @bot klasemen  -> tabel M/S/K + poin
 		if (isKlasemen)
 		{
-			await Send(http, outBase, msg.Jid, PairingStandings.Format(msg.Jid), null, logger);
+			await Send(http, outBase, msg.Jid, PairingStandings.Format(msg.Jid, BuildOpponents(msg.Jid)), null, logger);
 			return "klasemen";
 		}
 
@@ -1039,6 +1039,30 @@ internal static class PairingCommand
 		}
 	}
 
+	// Peta pemain -> daftar handle lawan (dari Played turnamen aktif) untuk tiebreak Buchholz.
+	private static Dictionary<string, List<string>> BuildOpponents(string jid)
+	{
+		Dictionary<string, List<string>> map = new Dictionary<string, List<string>>();
+		PairingTournament.TState? st = PairingTournament.Get(jid);
+		if (st == null || st.Played == null)
+		{
+			return map;
+		}
+		foreach (string pk in st.Played)
+		{
+			string[] parts = pk.Split('|');
+			if (parts.Length != 2)
+			{
+				continue;
+			}
+			if (!map.ContainsKey(parts[0])) { map[parts[0]] = new List<string>(); }
+			if (!map.ContainsKey(parts[1])) { map[parts[1]] = new List<string>(); }
+			map[parts[0]].Add(parts[1]);
+			map[parts[1]].Add(parts[0]);
+		}
+		return map;
+	}
+
 	// True kalau board ini bagian dari ronde turnamen aktif (buat batasi reminder no-show).
 	private static bool IsTournamentBoard(string jid, string bulkId)
 	{
@@ -1049,7 +1073,7 @@ internal static class PairingCommand
 
 	private static async Task FinishTournament(AppConfig config, HttpClient http, string outBase, string jid, ILogger logger)
 	{
-		string standings = PairingStandings.Format(jid);
+		string standings = PairingStandings.Format(jid, BuildOpponents(jid));
 		string winner = PairingStandings.Winner(jid);
 		PairingTournament.TState? stf = PairingTournament.Get(jid);
 		PairingTournament.AddHistory(jid, new PairingTournament.THistory
