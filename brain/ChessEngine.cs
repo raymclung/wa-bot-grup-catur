@@ -233,8 +233,12 @@ static class ChessAnalysis
                 "Kalau skakmat, jelaskan polanya singkat.";
             try
             {
-                string? expl = await Ai.Ask(ai, http, prompt, logger);
-                if (!string.IsNullOrWhiteSpace(expl)) text += $"\n\U0001F4A1 {expl!.Trim()}";
+                var explTask = Ai.Ask(ai, http, prompt, logger);
+                if (await Task.WhenAny(explTask, Task.Delay(12000)) == explTask)   // timeout 12s: analisa inti tak nunggu AI lama
+                {
+                    string? expl = await explTask;
+                    if (!string.IsNullOrWhiteSpace(expl)) text += $"\n\U0001F4A1 {expl!.Trim()}";
+                }
             }
             catch { }
         }
@@ -333,7 +337,7 @@ static class ChessAnalysis
                   (refPv.Length > 0 ? $"Setelah {userSan}, lawan membalas: {refPv}. " : "") +
                   $"Jelaskan 1-2 kalimat SINGKAT & natural kenapa {userSan} kurang baik dibanding {bestSan}, BERDASAR angka & garis engine di atas SAJA. " +
                   $"JANGAN mengarang garis lain. Kalau tak yakin detail, sebut alasan umum (kehilangan tempo/bidak, melemahkan raja, melewatkan taktik/skak). JANGAN menyebut langkah selain {bestSan} sebagai terbaik.";
-            try { string? e = await Ai.Ask(ai, http, prompt, logger); if (!string.IsNullOrWhiteSpace(e)) text += $"\n\U0001F4A1 {e!.Trim()}"; } catch { }
+            try { var et = Ai.Ask(ai, http, prompt, logger); if (await Task.WhenAny(et, Task.Delay(12000)) == et) { string? e = await et; if (!string.IsNullOrWhiteSpace(e)) text += $"\n\U0001F4A1 {e!.Trim()}"; } } catch { }
         }
         return new Output(text, fen);
     }
