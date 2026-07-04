@@ -912,12 +912,24 @@ function startServer() {
     try {
       const meta = await sock.groupMetadata(jid);
       indexParticipants(meta.participants); // sekalian segarkan peta LID->nomor
-      const members = (meta.participants || []).map((p) => ({
-        jid: p.id,
-        number: digits(p.id),
-        phone: p.jid ? digits(p.jid) : (String(p.id || '').endsWith('@s.whatsapp.net') ? digits(p.id) : ''),
-        admin: p.admin || null,
-      }));
+      const lm = sock && sock.signalRepository && sock.signalRepository.lidMapping;
+      const members = [];
+      for (const p of (meta.participants || [])) {
+        let phone = p.jid ? digits(p.jid) : (String(p.id || '').endsWith('@s.whatsapp.net') ? digits(p.id) : '');
+        // Peta in-memory (lidToPhone) hilang tiap restart -> untuk peserta @lid yang phone-nya kosong,
+        // pakai peta PERSISTEN Baileys (getPNForLID, dari riwayat pesan) supaya tag by-nama tetap jalan.
+        if (!phone && String(p.id || '').endsWith('@lid')) {
+          const lid = digits(p.id);
+          phone = lidToPhone.get(lid) || '';
+          if (!phone && lm && typeof lm.getPNForLID === 'function') {
+            try {
+              const pn = await lm.getPNForLID(lid + '@lid');
+              if (pn) { phone = digits(pn); setLid(lid, phone); }
+            } catch (e) { /* biarkan kosong kalau belum ada mapping */ }
+          }
+        }
+        members.push({ jid: p.id, number: digits(p.id), phone, admin: p.admin || null });
+      }
       res.json({ ok: true, subject: meta.subject, count: members.length, members });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
@@ -940,6 +952,36 @@ function startServer() {
     return batch.map((j) => '@' + digits(j)).join(' ');
   }
 
+  // Tag "menyala": WhatsApp pasca-migrasi LID hanya me-highlight mention kalau mentionedJid = NOMOR
+  // (@s.whatsapp.net), bukan @lid. Jadi tiap mention @lid diubah -> nomor, sekaligus token @<digit>
+  // di teks/caption diselaraskan. Pakai peta persisten (getPNForLID) agar tetap jalan walau gateway
+  // habis restart (peta in-memory kosong). Matikan dgn config.mentionForm = 'lid'.
+  async function mentionsToPhone(text, mentions) {
+    if (!Array.isArray(mentions) || mentions.length === 0 || config.mentionForm === 'lid') {
+      return { text, mentions: mentions || [] };
+    }
+    const lm = sock && sock.signalRepository && sock.signalRepository.lidMapping;
+    let out = String(text || '');
+    const newMentions = [];
+    for (const m of mentions) {
+      const raw = String(m || '');
+      if (raw.endsWith('@lid')) {
+        const lid = digits(raw);
+        let phone = lidToPhone.get(lid) || '';
+        if (!phone && lm && typeof lm.getPNForLID === 'function') {
+          try { const pn = await lm.getPNForLID(lid + '@lid'); if (pn) { phone = digits(pn); setLid(lid, phone); } } catch (e) { /* belum ada mapping */ }
+        }
+        if (phone) {
+          out = out.split('@' + lid).join('@' + phone); // token teks ikut jadi nomor
+          newMentions.push(phone + '@s.whatsapp.net');
+          continue;
+        }
+      }
+      newMentions.push(raw); // bukan @lid, atau nomor tak diketahui -> biarkan
+    }
+    return { text: out, mentions: newMentions };
+  }
+
   // Brain memerintahkan kirim pesan (mis. peringatan).
   app.post('/send', async (req, res) => {
     let { jid, text, mentions, replyToId } = req.body || {};
@@ -947,6 +989,11 @@ function startServer() {
       return res.status(400).json({ ok: false, error: 'jid & text wajib, dan socket harus siap' });
     }
     jid = toSendableJid(jid); // DM @lid -> nomor agar pesan benar-benar terkirim
+    // Grup: ubah mention @lid -> nomor supaya tag benar-benar menyala (highlight + notif).
+    if (String(jid).endsWith('@g.us')) {
+      const mp = await mentionsToPhone(text, mentions);
+      text = mp.text; mentions = mp.mentions;
+    }
     // Quote pesan yang dibalas (kalau ada di cache) -> jelas pesan mana yang dijawab.
     const quoted = replyToId ? msgCache.get(replyToId) : null;
     try {
@@ -997,6 +1044,10 @@ function startServer() {
       return res.status(400).json({ ok: false, error: 'jid & path wajib, dan socket harus siap' });
     }
     jid = toSendableJid(jid);
+    if (String(jid).endsWith('@g.us')) {
+      const mp = await mentionsToPhone(caption, mentions);
+      caption = mp.text; mentions = mp.mentions;
+    }
     const quoted = replyToId ? msgCache.get(replyToId) : null;
     try {
       const buf = await fs.promises.readFile(imgPath);  // async: jangan blokir event-loop

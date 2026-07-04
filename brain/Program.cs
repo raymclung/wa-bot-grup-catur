@@ -3813,6 +3813,7 @@ public class Program
 		cl_472.puzzlePool = LoadPuzzlePool(Path.Combine(text2, "puzzles.json"), cl_472.app.Logger);
 			AliasStore.Init(Path.Combine(text2, "aliases.json"));
 			TagAliasStore.Init(Path.Combine(text2, "tag-aliases.json"));
+			PersonaChat.Init(Path.Combine(text2, "persona-memory.json"));
 			PairingCommand.ResumePoller(cl_472.config, cl_472.http, cl_472.app.Logger);
 		cl_472.activePuzzles = LoadActivePuzzles(cl_472.activePuzzlePath);
 		cl_472.puzzleByMsg = new Dictionary<string, ActivePuzzle>();
@@ -3826,6 +3827,7 @@ public class Program
 		cl_472.puzzleLock = new object();
 		cl_472.puzzleDailyStatePath = Path.Combine(text2, "puzzle-daily.json");
 		PuzzleScoreStore.Init(Path.Combine(text2, "puzzle-scores.json"));
+		AdminRankStore.Init(Path.Combine(text2, "adminrank.json"));
 		StockfishEngine.Init(Path.Combine(contentRootPath, "engine", "stockfish.exe"), 1500);
 		cl_472.app.Logger.LogInformation("Stockfish engine: {S}", StockfishEngine.Available ? "siap" : "TAK ADA (engine/stockfish.exe)");
 		cl_472.app.Logger.LogInformation("Pool puzzle: {N} dimuat.", cl_472.puzzlePool.Count);
@@ -4378,6 +4380,12 @@ public class Program
 					ok = true,
 					action = "unmanaged"
 				});
+			}
+			if (g?.Persona != null && g.Persona.Enabled)
+			{
+				// Grup "tokoh": lewati SEMUA logika catur/moderasi -> hanya ngobrol sebagai persona.
+				string personaAction = await PersonaChat.HandleAsync(cl_472.config, cl_472.http, msg, g.Persona, cl_472.app.Logger);
+				return Results.Json(new { ok = true, action = personaAction });
 			}
 			bool eCommands = g?.CommandsEnabled ?? cl_472.config.CommandsEnabled;
 			bool eFlood = g?.FloodEnabled ?? cl_472.config.FloodEnabled;
@@ -6210,6 +6218,58 @@ public class Program
 					action = "peringkat"
 				});
 			}
+			// === !adminrank : papan peringkat ADMIN lintas grup (HANYA di grup "Liga Catur - Admin") ===
+			if (eCommands && isCommand && cmdName == "adminrank")
+			{
+				if (msg.Jid != cl_472.config.AdminSyncGroupJid)
+				{
+					return Results.Json(new { ok = true, action = "adminrank-wronggroup" });
+				}
+				List<PuzzleScoreStore.PlayerScore> topA = AdminRankStore.Top(20);
+				string textA;
+				if (topA.Count == 0)
+				{
+					textA = "Belum ada skor admin. Admin yang menjawab puzzle di grup mana pun (yang ada Judit) akan terkumpul di sini. 🧩";
+				}
+				else
+				{
+					StringBuilder sbA = new StringBuilder();
+					sbA.AppendLine("👑 *Papan Peringkat Admin (lintas grup)*");
+					string[] medalA = new string[3] { "🥇", "🥈", "🥉" };
+					for (int iA = 0; iA < topA.Count; iA++)
+					{
+						string posA = ((iA < 3) ? medalA[iA] : ((iA + 1) + "."));
+						string nmA = (string.IsNullOrWhiteSpace(topA[iA].Name) ? "Admin" : topA[iA].Name);
+						sbA.AppendLine(posA + " *" + nmA + "* — " + topA[iA].Points + " poin · " + topA[iA].Solves + " solusi");
+					}
+					textA = sbA.ToString();
+				}
+				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = textA });
+				return Results.Json(new { ok = true, action = "adminrank" });
+			}
+			// === !resetadminrank : reset papan admin (HANYA nomor pemilik, di grup admin) ===
+			if (eCommands && isCommand && cmdName == "resetadminrank")
+			{
+				bool arOwner = senderNum == "18284130303" || senderPhone == "18284130303";
+				if (msg.Jid != cl_472.config.AdminSyncGroupJid || !arOwner)
+				{
+					return Results.Json(new { ok = true, action = "resetadminrank-denied" });
+				}
+				bool hadA = AdminRankStore.Reset();
+				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = (hadA ? "Papan peringkat admin sudah direset. 🧹" : "Belum ada skor admin untuk direset.") });
+				return Results.Json(new { ok = true, action = "resetadminrank" });
+			}
+			// === !resetrank : admin reset papan LOKAL grup ini ===
+			if (eCommands && isCommand && cmdName == "resetrank")
+			{
+				if (!AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
+				{
+					return Results.Json(new { ok = true, action = "resetrank-denied" });
+				}
+				bool hadL = PuzzleScoreStore.Reset(msg.Jid);
+				await PostJson(cl_472.http, outBase + "/send", new { jid = msg.Jid, text = (hadL ? "Papan peringkat puzzle grup ini sudah direset. 🧹" : "Belum ada skor untuk direset.") });
+				return Results.Json(new { ok = true, action = "resetrank" });
+			}
 			puzzle = cl_472.config.Puzzle;
 			int num12;
 			if (puzzle != null)
@@ -6514,6 +6574,11 @@ public class Program
 							cl_472.SaveActivePuzzles();
 							int pts = PuzzleScoreStore.Tier(pap.Puzzle.Rating);
 							PuzzleScoreStore.Award(msg.Jid, senderNum, msg.PushName, pts, done);
+							if (AdminSync.IsAllowed(cl_472.config, senderNum, senderPhone))
+							{
+								// Kunci lintas grup = nomor HP (kalau ada), fallback ke ID WA.
+								AdminRankStore.Award((senderPhone.Length > 0) ? senderPhone : senderNum, msg.PushName, pts, done);
+							}
 							try
 							{
 								await PostJson(cl_472.http, outBase + "/react", new
@@ -8956,6 +9021,71 @@ internal class ActivePuzzle
 
 	public List<string> SolverJids { get; set; } = new List<string>();
 }
+// Papan peringkat ADMIN lintas grup: satu entri per admin (bukan per grup).
+// Poin bertambah saat seorang admin menjawab puzzle dengan BENAR di grup MANA PUN yang ada Judit.
+internal static class AdminRankStore
+{
+	private static readonly object _l = new object();
+	private static string _path = "";
+	private static Dictionary<string, PuzzleScoreStore.PlayerScore> _m = new Dictionary<string, PuzzleScoreStore.PlayerScore>();
+
+	public static void Init(string path)
+	{
+		_path = path;
+		try
+		{
+			if (File.Exists(path))
+			{
+				Dictionary<string, PuzzleScoreStore.PlayerScore>? d = JsonSerializer.Deserialize<Dictionary<string, PuzzleScoreStore.PlayerScore>>(File.ReadAllText(path));
+				if (d != null) _m = d;
+			}
+		}
+		catch { }
+	}
+
+	public static void Award(string key, string name, int points, bool solved)
+	{
+		if (string.IsNullOrWhiteSpace(key) || points <= 0) return;
+		lock (_l)
+		{
+			if (!_m.TryGetValue(key, out PuzzleScoreStore.PlayerScore? s) || s == null)
+			{
+				s = new PuzzleScoreStore.PlayerScore();
+				_m[key] = s;
+			}
+			if (!string.IsNullOrWhiteSpace(name)) s.Name = name;
+			s.Points += points;
+			s.Moves++;
+			if (solved) s.Solves++;
+			s.LastAt = DateTime.UtcNow.ToString("o");
+			SaveNoLock();
+		}
+	}
+
+	public static List<PuzzleScoreStore.PlayerScore> Top(int n)
+	{
+		lock (_l)
+		{
+			return (from s in _m.Values orderby s.Points descending, s.Solves descending select s).Take(n).ToList();
+		}
+	}
+
+	public static bool Reset()
+	{
+		lock (_l)
+		{
+			bool had = _m.Count > 0;
+			_m = new Dictionary<string, PuzzleScoreStore.PlayerScore>();
+			if (had) SaveNoLock();
+			return had;
+		}
+	}
+
+	private static void SaveNoLock()
+	{
+		try { File.WriteAllText(_path, JsonSerializer.Serialize(_m)); } catch { }
+	}
+}
 internal static class PuzzleScoreStore
 {
 	public class PlayerScore
@@ -9833,6 +9963,9 @@ internal class GroupConfig
 	public int? PuzzleSolveAfterMinutes { get; set; }
 
 	public bool? PuzzleCommandEnabled { get; set; }
+
+	// Mode "tokoh": kalau diisi & Enabled, grup ini jadi persona murni (semua fitur catur mati).
+	public PersonaConfig? Persona { get; set; }
 }
 internal class DataCommand
 {
