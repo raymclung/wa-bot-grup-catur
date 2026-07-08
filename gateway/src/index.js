@@ -41,6 +41,8 @@ let sock = null;
 
 /** State pemantau "bot mati". */
 let everConnected = false;      // sudah pernah konek WA (agar tak alert saat start awal)
+let waReady = false;            // koneksi WA BENAR-BENAR terbuka (untuk /health jujur + alarm logout)
+let waLoggedOut = false;        // sesi ter-logout (401) -> butuh re-link (scan QR)
 let waDisconnectedAt = null;    // kapan WA mulai putus (untuk rekap downtime)
 let waBackoffMs = 0;            // jeda reconnect bertahap (anti-hajar WhatsApp saat throttle)
 let profileDone = false;        // profil (nama/bio) sudah diset sekali per proses
@@ -632,6 +634,7 @@ async function startSocket() {
         }
       }
       everConnected = true;
+      waReady = true; waLoggedOut = false;   // koneksi hidup -> /health jujur + alarm aman
       waBackoffMs = 0;   // sukses konek -> reset backoff reconnect
       if (appearOffline) { try { await sock.sendPresenceUpdate('unavailable'); } catch {} } // tampil offline
       // Profil bot (sekali per proses): nama & bio konsisten (juga otomatis setelah swap akun).
@@ -651,11 +654,23 @@ async function startSocket() {
     }
 
     if (connection === 'close') {
+      waReady = false;   // koneksi tutup -> /health jujur (jangan lapor connected padahal mati)
       const code = lastDisconnect && lastDisconnect.error instanceof Boom
         ? lastDisconnect.error.output.statusCode
         : null;
 
+      // DIAGNOSTIK: tulis alasan disconnect ke file agar bisa dibaca dari luar (console tak terakses).
+      try {
+        fs.writeFileSync(path.join(__dirname, '..', 'last-disconnect.json'), JSON.stringify({
+          code: code,
+          loggedOut: code === DisconnectReason.loggedOut,
+          reason: (lastDisconnect && lastDisconnect.error && lastDisconnect.error.message) || '',
+          at: new Date().toISOString(),
+        }, null, 2));
+      } catch (e) {}
+
       if (code === DisconnectReason.loggedOut) {
+        waLoggedOut = true;   // tandai: butuh re-link (dipakai /health & alarm)
         console.log('\u26D4 Sesi logout. Hapus isi folder gateway/auth/ lalu jalankan ulang untuk scan QR baru.');
       } else {
         if (everConnected && !waDisconnectedAt) waDisconnectedAt = Date.now(); // tandai mulai putus
@@ -842,7 +857,7 @@ function startServer() {
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/health', (req, res) => {
-    res.json({ ok: true, connected: !!(sock && sock.user) });
+    res.json({ ok: true, connected: waReady, ready: waReady, loggedOut: waLoggedOut });
   });
 
   // Indikator "sedang mengetik" SEGERA (dipanggil brain begitu pesan masuk, selama AI berpikir).
