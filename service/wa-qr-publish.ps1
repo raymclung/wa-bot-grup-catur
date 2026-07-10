@@ -28,12 +28,12 @@ while ($true) {
     Copy-Item $gwqr $pngPath -Force
     $t = [DateTimeOffset]::Now.ToUnixTimeSeconds()
     $html = @"
-<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="12"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tautkan Bot</title></head>
+<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="30"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tautkan Bot</title></head>
 <body style="text-align:center;font-family:sans-serif;padding:18px;background:#f7f7f7">
 <h2>Tautkan Bot (Judit Polica)</h2>
-<p>WhatsApp &rarr; Perangkat Tertaut &rarr; Tautkan Perangkat &rarr; scan:</p>
+<p>WhatsApp &rarr; Perangkat Tertaut &rarr; Tautkan Perangkat &rarr; scan barcode di bawah:</p>
 <img src="$tok.png?t=$t" style="max-width:92vw;height:auto;border:1px solid #ccc">
-<p style="color:#888">QR auto-refresh ~12 dtk &mdash; scan barcode yang sedang tampil.</p></body></html>
+<p style="color:#888">QR berlaku ~3 menit &mdash; santai, tak perlu buru-buru. Halaman menyegarkan QR otomatis; scan barcode yang sedang tampil.</p></body></html>
 "@
     Set-Content -Path $htmlPath -Encoding UTF8 -Value $html
   }

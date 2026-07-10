@@ -584,7 +584,7 @@ async function startSocket() {
     auth: state,
     logger,
     printQRInTerminal: false,
-    qrTimeout: 40000, // refresh QR tiap 40 dtk (sebelum WA batalkan ~60 dtk) -> QR di layar SELALU valid utk scan kapan saja
+    qrTimeout: 180000, // QR bertahan ~3 menit per sesi (stabil, tak sering ganti)
     markOnlineOnConnect: !appearOffline, // false = tidak menyiarkan "online" saat konek (lebih manusiawi)
   });
 
