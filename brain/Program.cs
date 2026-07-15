@@ -12318,6 +12318,7 @@ internal static class Announcer
 						sent.Add(key);
 						SaveSent(sentPath, sent);
 						logger.LogInformation("Announcer: '{Name}' reminder {T} mnt -> {Jid}", t.Name, T, jid);
+						await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(25, 61)));
 					}
 				}
 			}
@@ -12356,6 +12357,7 @@ internal static class Announcer
 					resultsSent.Add(rkey);
 					SaveSent(resultsPath, resultsSent);
 					logger.LogInformation("Hasil otomatis terkirim: '{Name}' -> {Jid}", t2.Name, jid2);
+					await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(25, 61)));
 				}
 			}
 			surl = null;
