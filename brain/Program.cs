@@ -3814,6 +3814,7 @@ public class Program
 			AliasStore.Init(Path.Combine(text2, "aliases.json"));
 			TagAliasStore.Init(Path.Combine(text2, "tag-aliases.json"));
 			PersonaChat.Init(Path.Combine(text2, "persona-memory.json"));
+			ManagedGroupStore.Init(Path.Combine(text2, "managed-groups.json"));
 			PairingCommand.ResumePoller(cl_472.config, cl_472.http, cl_472.app.Logger);
 		cl_472.activePuzzles = LoadActivePuzzles(cl_472.activePuzzlePath);
 		cl_472.puzzleByMsg = new Dictionary<string, ActivePuzzle>();
@@ -4327,6 +4328,7 @@ public class Program
 				});
 			}
 			cl_472.config.Groups.TryGetValue(msg.Jid, out GroupConfig g);
+			if (g == null && ManagedGroupStore.TryGet(msg.Jid, out GroupConfig? _mgc) && _mgc != null) { g = _mgc; }
 			bool isPrivate = msg.Channel == "whatsapp" && !msg.Jid.EndsWith("@g.us");
 			PrivateChatConfig? privateChat = cl_472.config.PrivateChat;
 			bool? obj;
@@ -4373,7 +4375,23 @@ public class Program
 						pzlAnswerHere = true;
 					}
 				}
-				if (!cl_472.config.ManageAllGroups && g == null && msg.Channel == "whatsapp" && !dmAllowed && !pzlAnswerHere)
+				bool manageCmdHere = false;
+				if (g == null && msg.Jid.EndsWith("@g.us") && msg.Channel == "whatsapp" && !cl_472.config.ManageAllGroups)
+				{
+					string _mt = Regex.Replace(msg.Text.TrimStart(), "^(\\s*@\\d+\\s*)+", "").TrimStart();
+					string _mcmd = "";
+					string _mp = cl_472.config.CommandPrefix;
+					if (_mt.StartsWith(_mp)) { _mcmd = _mt.Substring(_mp.Length).TrimStart().Split(' ')[0].ToLowerInvariant(); }
+					else if (cl_472.config.CommandPrefixAlts != null)
+					{
+						foreach (string _a in cl_472.config.CommandPrefixAlts)
+						{
+							if (!string.IsNullOrEmpty(_a) && _mt.Length > _a.Length && _mt.StartsWith(_a) && char.IsLetter(_mt[_a.Length])) { _mcmd = _mt.Substring(_a.Length).Split(' ')[0].ToLowerInvariant(); break; }
+						}
+					}
+					if ((_mcmd == "kelola" || _mcmd == "stopkelola") && AdminSync.IsAllowed(cl_472.config, NumberUtil.Normalize(msg.Participant), NumberUtil.Normalize(msg.ParticipantPhone))) { manageCmdHere = true; }
+				}
+				if (!cl_472.config.ManageAllGroups && g == null && msg.Channel == "whatsapp" && !dmAllowed && !pzlAnswerHere && !manageCmdHere)
 			{
 				return Results.Json(new
 				{
@@ -4392,8 +4410,36 @@ public class Program
 			bool eModeration = g?.ModerationEnabled ?? cl_472.config.ModerationEnabled;
 			string trimmedText = msg.Text.TrimStart();
 			string cmdText = Regex.Replace(trimmedText, "^(\\s*@\\d+\\s*)+", "").TrimStart();
+			if (!cmdText.StartsWith(cl_472.config.CommandPrefix) && cl_472.config.CommandPrefixAlts != null)
+			{
+				foreach (string _alt in cl_472.config.CommandPrefixAlts)
+				{
+					if (!string.IsNullOrEmpty(_alt) && cmdText.Length > _alt.Length && cmdText.StartsWith(_alt) && char.IsLetter(cmdText[_alt.Length]))
+					{
+						cmdText = cl_472.config.CommandPrefix + cmdText.Substring(_alt.Length);
+						break;
+					}
+				}
+			}
 			bool isCommand = cmdText.StartsWith(cl_472.config.CommandPrefix);
 			string cmdName = (isCommand ? cmdText.Substring(cl_472.config.CommandPrefix.Length).TrimStart().Split(' ', 2)[0].ToLowerInvariant() : "");
+			// === .kelola / .stopkelola : admin daftarkan/lepas grup (puzzle ON, moderasi OFF) tanpa edit config ===
+			if (isCommand && (cmdName == "kelola" || cmdName == "stopkelola") && AdminSync.IsAllowed(cl_472.config, NumberUtil.Normalize(msg.Participant), NumberUtil.Normalize(msg.ParticipantPhone)))
+			{
+				string _kbase = ChannelRoute.BaseForJid(cl_472.config, msg.Jid);
+				string _ksubj = "";
+				try { List<GroupOption> _kg = await FetchGroups(cl_472.config.GatewayUrl, cl_472.http); GroupOption? _kh = _kg.FirstOrDefault((GroupOption x) => x.Jid == msg.Jid); if (_kh != null) { _ksubj = _kh.Subject; } } catch { }
+				string _klabel = string.IsNullOrWhiteSpace(_ksubj) ? msg.Jid : _ksubj;
+				if (cmdName == "kelola")
+				{
+					ManagedGroupStore.Add(msg.Jid, _ksubj);
+					await PostJson(cl_472.http, _kbase + "/send", new { jid = msg.Jid, text = "✅ Grup *" + _klabel + "* sekarang dikelola Judit.\nPuzzle & perintah AKTIF (mis. " + cl_472.config.CommandPrefix + "puzzle), moderasi MATI.\nUntuk berhenti: " + cl_472.config.CommandPrefix + "stopkelola" });
+					return Results.Json(new { ok = true, action = "kelola-on" });
+				}
+				bool _khad = ManagedGroupStore.Remove(msg.Jid);
+				await PostJson(cl_472.http, _kbase + "/send", new { jid = msg.Jid, text = (_khad ? ("Grup *" + _klabel + "* tidak lagi dikelola Judit. 👋") : "Grup ini memang tidak terdaftar.") });
+				return Results.Json(new { ok = true, action = "kelola-off" });
+			}
 			if (!isCommand && (g?.CommandsEnabled ?? cl_472.config.CommandsEnabled))
 			{
 				string natCmd = NaturalIntent.Detect(cl_472.config, cmdText, msg.MentionedBot);
@@ -6701,7 +6747,7 @@ public class Program
 						}
 						bool isReplyToPuzzle = msg.QuotedId.Length > 0 && (msg.QuotedId == pap.MsgId || cl_472.puzzleByMsg.ContainsKey(msg.QuotedId));
 						bool strongChess = Regex.IsMatch(attempt, "[KQRBNGMx=+#]") || attempt.Contains("O-O") || attempt.Contains("0-0");
-						if (!isReplyToPuzzle && !strongChess)
+						if (!isReplyToPuzzle && !strongChess && !ChessAnalysis.IsLegalMove((idx > 0 && idx - 1 < pap.Puzzle.Fens.Length) ? pap.Puzzle.Fens[idx - 1] : pap.Puzzle.Fen, attempt))
 						{
 							return Results.Json(new
 							{
@@ -8295,6 +8341,10 @@ internal class AppConfig
 
 	public string CommandPrefix { get; set; } = "!";
 
+	// Prefix alternatif yang juga diterima (mis. "." = 1 klik di Android). Kosong = hanya "!".
+	// Untuk alt, hanya dianggap perintah kalau diikuti HURUF (biar "..."/". ok" tidak kena).
+	public string[] CommandPrefixAlts { get; set; } = Array.Empty<string>();
+
 	public int CommandCooldownSeconds { get; set; } = 8;
 
 	public string DbConnectionString { get; set; } = "";
@@ -9020,6 +9070,64 @@ internal class ActivePuzzle
 	public List<string> SolverNums { get; set; } = new List<string>();
 
 	public List<string> SolverJids { get; set; } = new List<string>();
+}
+// Grup yang didaftarkan admin lewat perintah .kelola (tanpa edit config.json).
+// Default: puzzle + perintah AKTIF, moderasi/flood/welcome MATI. Persisten di data/managed-groups.json.
+internal static class ManagedGroupStore
+{
+	private static readonly object _l = new object();
+	private static string _path = "";
+	private static Dictionary<string, string> _m = new Dictionary<string, string>(); // jid -> label
+
+	public static void Init(string path)
+	{
+		_path = path;
+		try
+		{
+			if (File.Exists(path))
+			{
+				Dictionary<string, string>? d = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path));
+				if (d != null) _m = d;
+			}
+		}
+		catch { }
+	}
+
+	public static bool TryGet(string jid, out GroupConfig? cfg)
+	{
+		lock (_l)
+		{
+			if (_m.TryGetValue(jid, out string? label))
+			{
+				cfg = new GroupConfig
+				{
+					Label = string.IsNullOrWhiteSpace(label) ? "Managed" : label,
+					ModerationEnabled = false,
+					FloodEnabled = false,
+					WelcomeEnabled = false,
+					PuzzleCommandEnabled = true
+				};
+				return true;
+			}
+			cfg = null;
+			return false;
+		}
+	}
+
+	public static void Add(string jid, string label)
+	{
+		lock (_l) { _m[jid] = label ?? ""; Save(); }
+	}
+
+	public static bool Remove(string jid)
+	{
+		lock (_l) { bool had = _m.Remove(jid); if (had) Save(); return had; }
+	}
+
+	private static void Save()
+	{
+		try { File.WriteAllText(_path, JsonSerializer.Serialize(_m)); } catch { }
+	}
 }
 // Papan peringkat ADMIN lintas grup: satu entri per admin (bukan per grup).
 // Poin bertambah saat seorang admin menjawab puzzle dengan BENAR di grup MANA PUN yang ada Judit.

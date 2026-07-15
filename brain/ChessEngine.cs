@@ -388,6 +388,21 @@ static class ChessAnalysis
 
     static string NormSan(string s) => new string((s ?? "").Where(c => !"xX+#!?=".Contains(c)).ToArray()).Replace("0", "O").ToLowerInvariant();
 
+    // Apakah 'move' (SAN) langkah LEGAL di posisi 'fen'? Dipakai gate puzzle: langkah pion polos ("e2")
+    // yang SAH di posisi tetap dianggap jawaban (bukan obrolan), tanpa false-positive dari teks casual.
+    public static bool IsLegalMove(string fen, string move)
+    {
+        if (string.IsNullOrWhiteSpace(fen) || string.IsNullOrWhiteSpace(move)) return false;
+        try
+        {
+            var b = ChessBoard.LoadFromFen(fen);
+            string nu = NormSan(move);
+            foreach (var m in b.Moves()) if (NormSan(m.San) == nu) return true;
+        }
+        catch { }
+        return false;
+    }
+
     static string EvalText(string type, int val, string who)
     {
         // Skor dari sudut pandang pihak yang JALAN (mover = who).
