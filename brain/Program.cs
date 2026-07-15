@@ -10024,7 +10024,7 @@ internal class AnnouncerConfig
 
 	public int[] RemindersMinutes { get; set; } = new int[2] { 300, 15 };
 
-	public int[]? RandomWindowMinutes { get; set; }
+	public int[][]? RandomWindowMinutes { get; set; }
 
 	public int PollMinutes { get; set; } = 5;
 
@@ -12279,12 +12279,29 @@ internal static class Announcer
 		int[] remindersMinutes = cfg.Announcer.RemindersMinutes;
 		int[] reminders = ((remindersMinutes != null && remindersMinutes.Length > 0) ? cfg.Announcer.RemindersMinutes : new int[2] { 300, 15 });
 		List<string> targets = Targets(cfg.Announcer);
-		int[] rw = cfg.Announcer.RandomWindowMinutes;
-		bool useRandom = rw != null && rw.Length == 2 && rw[0] > 0 && rw[1] >= rw[0];
+		int[][] rws = cfg.Announcer.RandomWindowMinutes;
+		bool useRandom = rws != null && rws.Length > 0;
 		foreach (SwissItem t in list)
 		{
 			double mins = (t.StartsAt - nowUtc).TotalMinutes;
-			int[] array = (useRandom ? new int[1] { RandomOffset(t.Id, rw[0], rw[1]) } : reminders);
+			int[] array;
+			if (useRandom)
+			{
+				List<int> offs = new List<int>();
+				for (int w = 0; w < rws.Length; w++)
+				{
+					int[] win = rws[w];
+					if (win != null && win.Length == 2 && win[0] > 0 && win[1] >= win[0])
+					{
+						offs.Add(RandomOffset(t.Id + ":" + w, win[0], win[1]));
+					}
+				}
+				array = offs.ToArray();
+			}
+			else
+			{
+				array = reminders;
+			}
 			for (int i = 0; i < array.Length; i++)
 			{
 				int T = array[i];
