@@ -10039,6 +10039,8 @@ internal class AnnouncerConfig
 	public string[] ResultsGroupJids { get; set; } = Array.Empty<string>();
 
 	public int ResultsMaxAgeHours { get; set; } = 12;
+
+	public int[]? ResultsRandomDelayMinutes { get; set; }
 }
 internal class GroupConfig
 {
@@ -12332,6 +12334,11 @@ internal static class Announcer
 		foreach (SwissItem t2 in list)
 		{
 			if (t2.Status != "finished" || (nowUtc - t2.StartsAt).TotalHours > (double)maxAge || resultsSent.Contains(t2.Id))
+			{
+				continue;
+			}
+			int[] rdel = cfg.Announcer.ResultsRandomDelayMinutes;
+			if (rdel != null && rdel.Length == 2 && rdel[0] > 0 && rdel[1] >= rdel[0] && (nowUtc - t2.StartsAt).TotalMinutes < (double)RandomOffset(t2.Id + ":r", rdel[0], rdel[1]))
 			{
 				continue;
 			}
