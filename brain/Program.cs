@@ -2409,7 +2409,6 @@ public class Program
 								action = "analisa-nomedia"
 							});
 						}
-						try { File.WriteAllBytes(Path.Combine(puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG sementara: tuning recognition Chess.com
 						bool autoFlipped;
 						string placement = BoardVision.RecognizeFenAuto(imgBytes, pieceAssetsDir, out autoFlipped);
 						if (placement == null)
@@ -3959,59 +3958,6 @@ public class Program
 				});
 			}
 		});
-		cl_472.app.MapGet("/debug/extract-chesscom", (Func<Task<IResult>>)async delegate
-			{
-				try
-				{
-					string capPath = Path.Combine(cl_472.puzzleCacheDir, "_last_analisa.png");
-					if (!File.Exists(capPath)) return Results.Json(new { ok = false, error = "no _last_analisa.png" });
-					byte[] img = await File.ReadAllBytesAsync(capPath);
-					var known = new (int, int, char)[]
-					{
-						(7,0,'R'), (5,1,'B'), (2,5,'Q'), (6,2,'K'), (6,0,'P'),
-						(0,3,'r'), (3,0,'b'), (3,2,'q'), (0,4,'k'), (1,0,'p'), (6,5,'n')
-					};
-					string ccDir = Path.Combine(cl_472.pieceAssetsDir, "chesscom");
-					int n = BoardVision.ExtractTemplatesFromBoard(img, ccDir, known);
-					BoardVision.ResetCache();
-					return Results.Json(new { ok = true, extracted = n, dir = ccDir });
-				}
-				catch (Exception ex) { return Results.Json(new { ok = false, error = ex.Message }); }
-			});
-			cl_472.app.MapGet("/debug/recognize-last", (Func<IResult>)delegate
-			{
-				try
-				{
-					string capPath = Path.Combine(cl_472.puzzleCacheDir, "_last_analisa.png");
-					if (!File.Exists(capPath)) return Results.Json(new { ok = false, error = "no _last_analisa.png" });
-					byte[] img = File.ReadAllBytes(capPath);
-					string fenAuto = BoardVision.RecognizeFenAuto(img, cl_472.pieceAssetsDir, out bool flipped);
-					string fenRaw = BoardVision.RecognizeFen(img, cl_472.pieceAssetsDir, false);
-					return Results.Json(new { ok = true, auto = fenAuto, flipped, raw = fenRaw });
-				}
-				catch (Exception ex) { return Results.Json(new { ok = false, error = ex.Message }); }
-			});
-			cl_472.app.MapGet("/debug/test-pending-keys", (Func<IResult>)delegate
-			{
-				// Simulasi: gambar datang jid @lid, balasan "putih" datang jid @s.whatsapp.net (nomor sama).
-				string num = "628999test";
-				PendingAnalysis.SetMany("PLACEMENT", num + "@lid|" + num, "p|" + num, "n|" + num);
-				bool caught = PendingAnalysis.HasAny(num + "@s.whatsapp.net|" + num, "p|" + num, "n|" + num);
-				string took = PendingAnalysis.TakeAny(num + "@s.whatsapp.net|" + num, "p|" + num, "n|" + num);
-				return Results.Json(new { ok = true, caught, took, note = "caught=true berarti balasan giliran lintas @lid/@phone tertangkap" });
-			});
-			cl_472.app.MapGet("/debug/selftest-cburnett", (Func<IResult>)delegate
-			{
-				try
-				{
-					string startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-					string path = BoardRenderer.Render(startFen + " w - - 0 1", false, cl_472.puzzleCacheDir, cl_472.pieceAssetsDir);
-					byte[] img = File.ReadAllBytes(path);
-					string got = BoardVision.RecognizeFen(img, cl_472.pieceAssetsDir, false);
-					return Results.Json(new { ok = true, expected = startFen, got, match = got == startFen });
-				}
-				catch (Exception ex) { return Results.Json(new { ok = false, error = ex.Message }); }
-			});
 			cl_472.app.MapGet("/stats", (Func<Task<IResult>>)async delegate
 		{
 			bool gw = false;
@@ -6452,7 +6398,6 @@ public class Program
 								action = "analisa-nomedia"
 							});
 						}
-						try { File.WriteAllBytes(Path.Combine(cl_472.puzzleCacheDir, "_last_analisa.png"), imgBytes); } catch { } // DEBUG sementara: tuning recognition Chess.com
 						bool autoFlipped;
 						string placement = BoardVision.RecognizeFenAuto(imgBytes, cl_472.pieceAssetsDir, out autoFlipped);
 						if (placement == null)
