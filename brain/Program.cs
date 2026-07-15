@@ -7185,15 +7185,26 @@ public class Program
 			string welcomeMsg = g?.WelcomeMessage ?? cl_472.config.WelcomeMessage;
 			string rulesText = g?.RulesText ?? cl_472.config.RulesText;
 			string[] participants3 = ev.Participants;
+			// SATU pesan sambutan untuk seluruh yang join (cegah burst N-pesan saat join massal).
+			// Tag maks 5 orang biar tak jadi mention-spam; sisanya tetap tersambut tanpa tag.
+			List<string> welTags = new List<string>();
+			List<string> welMentions = new List<string>();
 			foreach (string p in participants3)
 			{
-				string number = NumberUtil.Normalize(p);
-				string text3 = welcomeMsg.Replace("@user", "@" + number).Replace("{group}", ev.GroupName ?? "").Replace("{rules}", rulesText);
+				if (welMentions.Count < 5)
+				{
+					welTags.Add("@" + NumberUtil.Normalize(p));
+					welMentions.Add(p);
+				}
+			}
+			if (welMentions.Count > 0)
+			{
+				string text3 = welcomeMsg.Replace("@user", string.Join(" ", welTags)).Replace("{group}", ev.GroupName ?? "").Replace("{rules}", rulesText);
 				await cl_472.PostImportant(ChannelRoute.BaseForJid(cl_472.config, ev.Jid) + "/send", new
 				{
 					jid = ev.Jid,
 					text = text3,
-					mentions = new string[1] { p }
+					mentions = welMentions.ToArray()
 				});
 			}
 			cl_472.app.Logger.LogInformation("Sambutan dikirim ke {Count} member baru di {Jid}", ev.Participants.Length, ev.Jid);
