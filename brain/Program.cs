@@ -6756,13 +6756,25 @@ public class Program
 							});
 						}
 						pap.WrongCount++;
-						if (cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzwrong", (pap.WrongCount <= 3) ? 10 : 25) && cl_472.cmdCooldown.Allow(msg.Jid + "|pzwrongAny", (pap.WrongCount <= 3) ? 4 : 25))
+						// Salah PER-LANGKAH (reset saat pemain benar & maju ke langkah berikutnya = idx berubah).
+						if (pap.LastWrongMoveIdx != idx) { pap.WrongAtMove = 0; pap.LastWrongMoveIdx = idx; }
+						pap.WrongAtMove++;
+						if (pap.WrongAtMove >= 2)
 						{
+							// Salah ke-2+ di langkah ini -> cukup REACTION (hemat, rendah risiko anti-ban), TANPA teks.
+							if (msg.Key.ValueKind == JsonValueKind.Object && cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzreact", 6))
+							{
+								try { await PostJson(cl_472.http, outBase + "/react", new { jid = msg.Jid, key = msg.Key, emoji = PuzzleMove.RandomWrongEmoji() }); } catch { }
+							}
+						}
+						else if (cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzwrong", 8) && cl_472.cmdCooldown.Allow(msg.Jid + "|pzwrongAny", 4))
+						{
+							// Salah PERTAMA di langkah ini -> balas TEKS (pembuka bervariasi + alasan jelas).
 							// nama tampil lewat mention @senderNum (di-tag agar pemain ke-notify)
 							string nextSanW = (idx < sol.Length) ? sol[idx] : "";
 							string engHintW = null;
-							if (pap.WrongCount <= 3 && StockfishEngine.Available) { string curFenW = (idx > 0 && idx - 1 < pap.Puzzle.Fens.Length) ? pap.Puzzle.Fens[idx - 1] : pap.Puzzle.Fen; try { engHintW = await ChessAnalysis.CritiqueSafe(curFenW, attempt); } catch { } }
-							string text4 = (pap.WrongCount <= 3) ? ("Belum pas, @" + senderNum + ".\n" + (engHintW ?? PuzzleMove.LocalWrongHint(nextSanW, pap.WrongCount))) : ("Belum pas, @" + senderNum + ".");
+							if (StockfishEngine.Available) { string curFenW = (idx > 0 && idx - 1 < pap.Puzzle.Fens.Length) ? pap.Puzzle.Fens[idx - 1] : pap.Puzzle.Fen; try { engHintW = await ChessAnalysis.CritiqueSafe(curFenW, attempt); } catch { } }
+							string text4 = PuzzleMove.RandomWrongIntro(senderNum) + "\n" + (engHintW ?? PuzzleMove.LocalWrongHint(nextSanW, pap.WrongCount));
 							if (pap.WrongCount >= 4 && !pap.SolveHintShown)
 							{
 								text4 += "\n\nKetik " + cl_472.config.CommandPrefix + (cl_472.config.Puzzle?.SolveCommand ?? "solusi") + " untuk lihat jawabannya."; pap.SolveHintShown = true;
@@ -9056,6 +9068,13 @@ internal class ActivePuzzle
 	// Jumlah jawaban salah sejak puzzle ini aktif (untuk menawarkan !solusi setelah beberapa kali meleset).
 	public int WrongCount { get; set; }
 
+	// Jumlah salah pada LANGKAH yang sedang berjalan (reset saat pemain maju ke langkah berikutnya).
+	// Salah ke-1 langkah ini -> balas teks; salah ke-2+ -> cukup reaction (kurangi risiko spam).
+	public int WrongAtMove { get; set; }
+
+	// Index langkah tempat WrongAtMove terakhir dihitung (-1 = belum). Beda idx = reset per-langkah.
+	public int LastWrongMoveIdx { get; set; } = -1;
+
 	// Sudah pernah menampilkan tawaran !solusi pada puzzle ini (agar tidak diulang terus = tidak cerewet).
 	public bool SolveHintShown { get; set; }
 
@@ -9403,6 +9422,29 @@ internal static class PuzzleMove
 			"Langkah terbaik biasanya memaksa. Cek dulu: skak, tangkapan, atau ancaman."
 		};
 		return g[variant % g.Length];
+	}
+
+	// Pembuka BERVARIASI untuk jawaban salah PERTAMA pada sebuah langkah (hindari template kaku yang berulang).
+	private static readonly string[] _wrongIntros = new string[]
+	{
+		"Belum pas", "Wah, belum tepat", "Hmm, kurang pas", "Belum kena",
+		"Nyaris, tapi belum", "Coba lagi ya, belum betul", "Sayang, belum tepat",
+		"Belum berhasil", "Eh, belum pas nih", "Kurang tepat",
+		"Belum, coba pikir lagi", "Masih meleset"
+	};
+
+	public static string RandomWrongIntro(string userTag)
+	{
+		string p = _wrongIntros[Random.Shared.Next(_wrongIntros.Length)];
+		return string.IsNullOrEmpty(userTag) ? (p + ".") : (p + ", @" + userTag + ".");
+	}
+
+	// Emoji reaction untuk jawaban salah ke-2+ pada satu langkah (pengganti teks, hemat & rendah risiko).
+	private static readonly string[] _wrongEmojis = new string[] { "\u274c", "\ud83e\udd14", "\ud83d\ude05", "\ud83d\ude45" };
+
+	public static string RandomWrongEmoji()
+	{
+		return _wrongEmojis[Random.Shared.Next(_wrongEmojis.Length)];
 	}
 
 	// Nama tampilan ramah (mis. "Ade") dari PushName WhatsApp: kata pertama yang mengandung huruf.
