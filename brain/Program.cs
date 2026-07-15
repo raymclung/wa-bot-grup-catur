@@ -5684,12 +5684,17 @@ public class Program
 					{
 					}
 					TopicStore.Set(jid, topic);
-					await PostJson(cl_472.http, outBase + "/send", new
+					FatigueConfig fcfg = cl_472.config.Fatigue;
+					if (!BotFatigue.IsTired(jid, fcfg))
 					{
-						jid = msg.Jid,
-						text = "@" + asker + " " + reply,
-						mentions = new string[1] { msg.Participant }
-					});
+						BotFatigue.Bump(jid, fcfg);
+						await PostJson(cl_472.http, outBase + "/send", new
+						{
+							jid = msg.Jid,
+							text = "@" + asker + " " + reply,
+							mentions = new string[1] { msg.Participant }
+						});
+					}
 					return Results.Json(new
 					{
 						ok = true,
@@ -6759,7 +6764,7 @@ public class Program
 						// Salah PER-LANGKAH (reset saat pemain benar & maju ke langkah berikutnya = idx berubah).
 						if (pap.LastWrongMoveIdx != idx) { pap.WrongAtMove = 0; pap.LastWrongMoveIdx = idx; }
 						pap.WrongAtMove++;
-						if (pap.WrongAtMove >= 2)
+						if (pap.WrongAtMove >= 2 || BotFatigue.IsTired(msg.Jid, cl_472.config.Fatigue))
 						{
 							// Salah ke-2+ di langkah ini -> cukup REACTION (hemat, rendah risiko anti-ban), TANPA teks.
 							if (msg.Key.ValueKind == JsonValueKind.Object && cl_472.cmdCooldown.Allow(msg.Jid + "|" + senderNum + "|pzreact", 6))
@@ -6786,6 +6791,7 @@ public class Program
 								mentions = new string[1] { msg.Participant },
 								replyToId = inMsgId
 							});
+							BotFatigue.Bump(msg.Jid, cl_472.config.Fatigue);
 						}
 						return Results.Json(new
 						{
@@ -8392,6 +8398,8 @@ internal class AppConfig
 	public Dictionary<string, GroupConfig> Groups { get; set; } = new Dictionary<string, GroupConfig>();
 
 	public AnnouncerConfig? Announcer { get; set; }
+
+	public FatigueConfig? Fatigue { get; set; }
 
 	public AiConfig? Ai { get; set; }
 
@@ -10052,6 +10060,68 @@ internal static class NaturalIntent
 			}
 		}
 		return null;
+	}
+}
+internal class FatigueConfig
+{
+	// Mode "capek": kalau bot sudah banyak bicara di 1 grup, diam dulu (backoff obrolan).
+	public bool Enabled { get; set; } = true;
+
+	// Ambang: berapa balasan obrolan dalam WindowMinutes sebelum bot "capek".
+	public int MaxMessages { get; set; } = 6;
+
+	public int WindowMinutes { get; set; } = 5;
+
+	// Berapa lama bot diam (tak balas obrolan/AI) setelah ambang tercapai.
+	public int CooldownMinutes { get; set; } = 10;
+}
+internal static class BotFatigue
+{
+	private static readonly object _lock = new object();
+
+	private static readonly Dictionary<string, List<DateTime>> _talks = new Dictionary<string, List<DateTime>>();
+
+	private static readonly Dictionary<string, DateTime> _tiredUntil = new Dictionary<string, DateTime>();
+
+	// True = grup sedang "capek" -> bot menahan balasan obrolan/AI/puzzle-hint.
+	public static bool IsTired(string jid, FatigueConfig cfg)
+	{
+		if (cfg == null || !cfg.Enabled || string.IsNullOrEmpty(jid))
+		{
+			return false;
+		}
+		lock (_lock)
+		{
+			return _tiredUntil.TryGetValue(jid, out DateTime until) && DateTime.UtcNow < until;
+		}
+	}
+
+	// Catat satu balasan obrolan. Kalau melewati ambang dalam window -> set periode diam.
+	public static void Bump(string jid, FatigueConfig cfg)
+	{
+		if (cfg == null || !cfg.Enabled || string.IsNullOrEmpty(jid))
+		{
+			return;
+		}
+		DateTime now = DateTime.UtcNow;
+		int winMin = (cfg.WindowMinutes <= 0) ? 5 : cfg.WindowMinutes;
+		int max = (cfg.MaxMessages <= 0) ? 6 : cfg.MaxMessages;
+		int cd = (cfg.CooldownMinutes <= 0) ? 10 : cfg.CooldownMinutes;
+		lock (_lock)
+		{
+			if (!_talks.TryGetValue(jid, out List<DateTime> list))
+			{
+				list = new List<DateTime>();
+				_talks[jid] = list;
+			}
+			list.Add(now);
+			list.RemoveAll((DateTime t) => (now - t).TotalMinutes > (double)winMin);
+			if (list.Count >= max)
+			{
+				_tiredUntil[jid] = now.AddMinutes(cd);
+				list.Clear();
+			}
+		}
 	}
 }
 internal class AnnouncerConfig
