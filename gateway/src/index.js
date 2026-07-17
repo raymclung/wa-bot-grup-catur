@@ -676,7 +676,7 @@ async function startSocket() {
         if (everConnected && !waDisconnectedAt) waDisconnectedAt = Date.now(); // tandai mulai putus
         // Backoff: naikkan jeda tiap putus beruntun (2s,4s,...,maks 60s) supaya tidak menghajar
         // WhatsApp saat sesi dibatasi/throttle \u2014 agar throttle cepat lepas & koneksi stabil.
-        waBackoffMs = Math.min(waBackoffMs ? waBackoffMs * 2 : 2000, 60000);
+        waBackoffMs = Math.min(waBackoffMs ? waBackoffMs * 2 : 5000, 300000);
         console.log(`\uD83D\uDD04 Koneksi terputus, menyambung ulang dalam ${Math.round(waBackoffMs / 1000)}s...`);
         setTimeout(() => startSocket(), waBackoffMs);
       }
