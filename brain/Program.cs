@@ -6628,39 +6628,14 @@ public class Program
 							else
 							{
 								string cap = $"✅ *Benar, @{senderNum}!* (+{pts} poin) \ud83d\udc4f Lawan membalas *{oppMove}*.\nSekarang giliranmu — langkah terbaik berikutnya apa? \ud83e\udd14";
-								string[] fens = pap.Puzzle.Fens;
-								string img = null;
-								if (prog - 1 >= 0 && prog - 1 < fens.Length)
+								// HEMAT VOLUME (anti-throttle): kirim TEKS saja, tanpa render gambar papan tiap langkah benar.
+								await PostJson(cl_472.http, outBase + "/send", new
 								{
-									try
-									{
-										img = BoardRenderer.Render(fens[prog - 1], pap.Puzzle.Side == "b", cl_472.puzzleCacheDir, cl_472.pieceAssetsDir);
-									}
-									catch
-									{
-									}
-								}
-								if (img == null)
-								{
-									await PostJson(cl_472.http, outBase + "/send", new
-									{
-										jid = msg.Jid,
-										text = cap,
-										mentions = new string[1] { msg.Participant },
-										replyToId = inMsgId
-									});
-								}
-								else
-								{
-									await PostJson(cl_472.http, outBase + "/send-image", new
-									{
-										jid = msg.Jid,
-										path = img,
-										caption = cap,
-										mentions = new string[1] { msg.Participant },
-										replyToId = inMsgId
-									});
-								}
+									jid = msg.Jid,
+									text = cap,
+									mentions = new string[1] { msg.Participant },
+									replyToId = inMsgId
+								});
 							}
 							return Results.Json(new
 							{
