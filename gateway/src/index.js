@@ -242,6 +242,7 @@ function sanitizeContent(content) {
 let _sendGate = Promise.resolve();
 let _lastSendAt = 0;
 let _sendTimes = [];   // timestamp kirim dalam 60 dtk terakhir (untuk rate-limit per menit)
+let _sendTimesHour = []; // timestamp kirim dalam 1 jam terakhir (cap volume/jam, anti-throttle)
 // Berapa ms harus ditunggu agar tidak melewati maxPerMinute (sliding window 60 dtk). 0 = boleh kirim.
 function rateLimitWaitMs() {
   const rl = config.rateLimit;
@@ -274,8 +275,15 @@ function safeSend(jid, content, options) {
     // Kalau ditolak setelah memesan slot, kiriman gagal saat reconnect akan "memakan"
     // kuota per-menit & jeda -> menghambat kiriman asli yang seharusnya lolos.
     if (!(sock && sock.user)) throw new Error('socket WA belum siap - kirim ditolak');
+    // Cap per JAM (anti-throttle): kalau volume 1 jam terakhir sudah penuh, DROP langsung (jangan tunggu).
+    const maxHour = (config.rateLimit && config.rateLimit.maxPerHour > 0) ? config.rateLimit.maxPerHour : 0;
+    if (maxHour > 0) {
+      _sendTimesHour = _sendTimesHour.filter((t) => Date.now() - t < 3600000);
+      if (_sendTimesHour.length >= maxHour) throw new Error('cap pesan/jam tercapai - kirim ditolak (anti-throttle)');
+    }
     _lastSendAt = Date.now();
     _sendTimes.push(Date.now());
+    _sendTimesHour.push(Date.now());
     // Timeout guard: satu kirim yang menggantung (mis. jid tak valid) JANGAN sampai
     // menyumbat seluruh antrian. Tolak setelah 25 dtk agar rantai lanjut.
     return Promise.race([
