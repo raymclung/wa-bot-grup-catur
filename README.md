@@ -1,40 +1,23 @@
-<div align="center">
+# wa-bot-grup-catur
 
-# 🤖 WA Bot — Moderasi Grup Catur
+Bot moderasi grup WhatsApp untuk komunitas catur Chess Stream / CCL. Berjalan sejak
+Juni 2026.
 
-**Bot moderasi grup WhatsApp berbasis aturan, dengan arsitektur hybrid Node.js + C#.**
+Arsitekturnya dipisah dua. **`gateway/`** (Node.js + Baileys) hanya mengurus koneksi
+WhatsApp dan menjalankan perintah — tidak ada satu pun aturan moderasi di sana.
+**`brain/`** (C# .NET 10) yang memegang seluruh logika: membaca aturan dari JSON,
+memutuskan pelanggaran, lalu menyuruh gateway menghapus pesan dan mengirim peringatan.
 
-[![C#](https://img.shields.io/badge/C%23-.NET%2010-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
-[![Node.js](https://img.shields.io/badge/Node.js-Baileys-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![WhatsApp](https://img.shields.io/badge/WhatsApp-Bot-25D366?style=flat-square&logo=whatsapp&logoColor=white)](#)
-[![Rule Based](https://img.shields.io/badge/Moderasi-rule--based-FF7A2D?style=flat-square)](#menambah-aturan-baru)
-[![No AI](https://img.shields.io/badge/Runtime-tanpa%20AI-6B7280?style=flat-square)](#)
+Pemisahan ini saya pilih supaya aturan moderasi bisa diuji tanpa perlu terhubung ke
+WhatsApp sama sekali, dan supaya gateway bisa diganti tanpa menyentuh logikanya.
 
-</div>
+Saat berjalan bot tidak memakai token atau AI apa pun — murni pencocokan pola dengan
+regex. Ini disengaja: hasilnya bisa diprediksi, murah, dan tidak bergantung layanan luar.
 
----
-
-## Ringkasan
-
-Bot moderasi grup WhatsApp **rule-based**, dipakai untuk grup komunitas catur
-(Chess Stream / CCL). Arsitekturnya **hybrid**, memisahkan koneksi dari logika:
-
-| Komponen | Teknologi | Perannya |
-|---|---|---|
-| **`gateway/`** | Node.js + Baileys | Lapisan tipis. Hanya menjaga koneksi WhatsApp dan menjalankan perintah — tidak ada logika moderasi di sini. |
-| **`brain/`** | C# (.NET 10) | "Otak" moderasi: membaca aturan dari JSON, memutuskan pelanggaran, lalu memerintahkan gateway menghapus pesan dan mengirim peringatan. |
-
-Pemisahan ini membuat logika moderasi dapat diuji tanpa koneksi WhatsApp,
-dan gateway dapat diganti tanpa menyentuh aturan.
-
-> [!NOTE]
-> Saat berjalan, bot **tidak memakai token maupun AI apa pun** — murni pencocokan
-> pola dengan regex. Ini disengaja: hasilnya dapat diprediksi, murah, dan tidak
-> bergantung pada layanan luar.
-
-- **Aturan saat ini:** hapus pesan berisi link/promosi **judi & spam** (`brain/config/rules.json`, bisa ditambah).
-- **Aksi:** hapus pesan + kirim peringatan. **Tanpa kick otomatis.**
-- **Syarat:** bot harus jadi **admin grup** agar bisa menghapus pesan anggota.
+- Aturan saat ini: hapus pesan berisi link atau promosi judi dan spam
+  (`brain/config/rules.json`, bisa ditambah)
+- Aksinya: hapus pesan lalu kirim peringatan. Tidak ada kick otomatis
+- Syaratnya: bot harus jadi admin grup agar bisa menghapus pesan anggota
 
 ## Alur
 
