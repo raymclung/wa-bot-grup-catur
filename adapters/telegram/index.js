@@ -1,4 +1,4 @@
-﻿// Adapter Telegram â€” menghubungkan Telegram ke brain (channel-agnostic).
+// Adapter Telegram — menghubungkan Telegram ke brain (channel-agnostic).
 // Brain tidak tahu ini Telegram; ia hanya bicara kontrak /incoming + /send (lihat adapters/README.md).
 //
 // Jalankan:  TELEGRAM_BOT_TOKEN=123:abc node index.js
@@ -35,7 +35,7 @@ async function tg(method, body) {
   return json;
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ KELUAR: brain â†’ adapter (HTTP server) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ───────────── KELUAR: brain → adapter (HTTP server) ─────────────
 function readBody(req) {
   return new Promise((resolve) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => resolve(b)); });
 }
@@ -70,7 +70,7 @@ http.createServer(async (req, res) => {
   }
 }).listen(PORT, '127.0.0.1', () => console.log(`Adapter Telegram aktif di http://127.0.0.1:${PORT}`));
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ MASUK: Telegram â†’ brain (long polling) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ───────────── MASUK: Telegram → brain (long polling) ─────────────
 async function forward(m, mentioned) {
   await fetch(`${BRAIN}/incoming`, {
     method: 'POST',

@@ -1,11 +1,36 @@
-# WA Bot â€” Moderasi Grup Chess Stream / CCL (Hybrid: Node + C#)
+<div align="center">
 
-Bot moderasi grup WhatsApp **rule-based**. Arsitektur **hybrid**:
+# 🤖 WA Bot — Moderasi Grup Catur
 
-- **`gateway/`** â€” Node.js + Baileys (tipis). Hanya menjaga koneksi WhatsApp dan menjalankan perintah. Tidak ada logika moderasi.
-- **`brain/`** â€” C# (.NET 10). "Otak" moderasi: baca aturan dari JSON, putuskan pelanggaran, perintahkan gateway hapus + warning. Tempat integrasi ke stack Chess Stream nanti.
+**Bot moderasi grup WhatsApp berbasis aturan, dengan arsitektur hybrid Node.js + C#.**
 
-Saat berjalan **tidak memakai token/AI apa pun** â€” murni pencocokan pola (regex).
+[![C#](https://img.shields.io/badge/C%23-.NET%2010-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![Node.js](https://img.shields.io/badge/Node.js-Baileys-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![WhatsApp](https://img.shields.io/badge/WhatsApp-Bot-25D366?style=flat-square&logo=whatsapp&logoColor=white)](#)
+[![Rule Based](https://img.shields.io/badge/Moderasi-rule--based-FF7A2D?style=flat-square)](#menambah-aturan-baru)
+[![No AI](https://img.shields.io/badge/Runtime-tanpa%20AI-6B7280?style=flat-square)](#)
+
+</div>
+
+---
+
+## Ringkasan
+
+Bot moderasi grup WhatsApp **rule-based**, dipakai untuk grup komunitas catur
+(Chess Stream / CCL). Arsitekturnya **hybrid**, memisahkan koneksi dari logika:
+
+| Komponen | Teknologi | Perannya |
+|---|---|---|
+| **`gateway/`** | Node.js + Baileys | Lapisan tipis. Hanya menjaga koneksi WhatsApp dan menjalankan perintah — tidak ada logika moderasi di sini. |
+| **`brain/`** | C# (.NET 10) | "Otak" moderasi: membaca aturan dari JSON, memutuskan pelanggaran, lalu memerintahkan gateway menghapus pesan dan mengirim peringatan. |
+
+Pemisahan ini membuat logika moderasi dapat diuji tanpa koneksi WhatsApp,
+dan gateway dapat diganti tanpa menyentuh aturan.
+
+> [!NOTE]
+> Saat berjalan, bot **tidak memakai token maupun AI apa pun** — murni pencocokan
+> pola dengan regex. Ini disengaja: hasilnya dapat diprediksi, murah, dan tidak
+> bergantung pada layanan luar.
 
 - **Aturan saat ini:** hapus pesan berisi link/promosi **judi & spam** (`brain/config/rules.json`, bisa ditambah).
 - **Aksi:** hapus pesan + kirim peringatan. **Tanpa kick otomatis.**
@@ -14,58 +39,58 @@ Saat berjalan **tidak memakai token/AI apa pun** â€” murni pencocokan pola 
 ## Alur
 
 ```
-WhatsApp â‡„ gateway (Node/Baileys) â”€â”€POST /incomingâ”€â”€â–¶ brain (C#)
-                  â–²                                        â”‚
-                  â””â”€â”€â”€â”€ POST /delete , POST /send â—€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+WhatsApp ⇄ gateway (Node/Baileys) ──POST /incoming──▶ brain (C#)
+                  ▲                                        │
+                  └──── POST /delete , POST /send ◀────────┘
 ```
 
 ## Cara menjalankan (paling mudah)
 
-Klik dua kali **`start-all.bat`** di folder ini â€” otomatis membuka dua jendela (brain + gateway). **QR muncul di jendela "WA Gateway"**.
+Klik dua kali **`start-all.bat`** di folder ini — otomatis membuka dua jendela (brain + gateway). **QR muncul di jendela "WA Gateway"**.
 
 ## Cara menjalankan (manual, DUA terminal)
 
-**Terminal 1 â€” brain (C#):**
+**Terminal 1 — brain (C#):**
 ```bash
-cd c:\Users\dev8\Documents\wa-bot\brain
+cd <folder-repo>\brain
 dotnet run
 ```
 Brain mendengarkan di `http://127.0.0.1:5050`.
 
-**Terminal 2 â€” gateway (Node):**
+**Terminal 2 — gateway (Node):**
 ```bash
-cd c:\Users\dev8\Documents\wa-bot\gateway
+cd <folder-repo>\gateway
 npm install
 npm start
 ```
 Muncul **QR code** di terminal. Scan dengan WhatsApp **nomor bot** (Setelan â†’ Perangkat Tertaut â†’ Tautkan Perangkat). Sesi tersimpan di `gateway/auth/`, jadi tidak perlu scan ulang tiap start.
 
-> Jalankan **brain dulu**, lalu gateway â€” supaya pesan pertama yang masuk langsung terkirim ke brain.
+> Jalankan **brain dulu**, lalu gateway — supaya pesan pertama yang masuk langsung terkirim ke brain.
 
 ## Struktur
 
 ```
 wa-bot/
-â”œâ”€â”€ start-all.bat            jalankan brain + gateway sekaligus
-â”œâ”€â”€ ganti-nomor.bat          hapus sesi login & scan QR nomor baru
-â”œâ”€â”€ service/                 auto-start saat server reboot
-â”‚   â”œâ”€â”€ run-brain.cmd        wrapper loop-restart brain
-â”‚   â”œâ”€â”€ run-gateway.cmd      wrapper loop-restart gateway
-â”‚   â”œâ”€â”€ install-autostart.ps1
-â”‚   â””â”€â”€ uninstall-autostart.ps1
-â”œâ”€â”€ gateway/                 Node + Baileys (koneksi WA)
-â”‚   â”œâ”€â”€ package.json
-â”‚   â”œâ”€â”€ config.json          port, URL webhook brain
-â”‚   â”œâ”€â”€ auth/                sesi login WA (otomatis, JANGAN di-commit)
-â”‚   â””â”€â”€ src/index.js         konek + QR + teruskan ke brain + /send /delete
-â””â”€â”€ brain/                   C# .NET 10 (otak moderasi)
-    â”œâ”€â”€ WaBot.csproj
-    â”œâ”€â”€ Program.cs           webhook /incoming + logika hapus/warning
-    â”œâ”€â”€ config/
-    â”‚   â”œâ”€â”€ config.json      URL gateway + teks peringatan + exemptNumbers
-    â”‚   â””â”€â”€ rules.json       daftar aturan moderasi (extensible)
-    â”œâ”€â”€ logs/audit.log       catatan setiap pesan yang dihapus (otomatis)
-    â””â”€â”€ data/warnings.json   hitungan peringatan per anggota (otomatis)
+├── start-all.bat            jalankan brain + gateway sekaligus
+├── ganti-nomor.bat          hapus sesi login & scan QR nomor baru
+├── service/                 auto-start saat server reboot
+│   ├── run-brain.cmd        wrapper loop-restart brain
+│   ├── run-gateway.cmd      wrapper loop-restart gateway
+│   ├── install-autostart.ps1
+│   └── uninstall-autostart.ps1
+├── gateway/                 Node + Baileys (koneksi WA)
+│   ├── package.json
+│   ├── config.json          port, URL webhook brain
+│   ├── auth/                sesi login WA (otomatis, JANGAN di-commit)
+│   └── src/index.js         konek + QR + teruskan ke brain + /send /delete
+└── brain/                   C# .NET 10 (otak moderasi)
+    ├── WaBot.csproj
+    ├── Program.cs           webhook /incoming + logika hapus/warning
+    ├── config/
+    │   ├── config.json      URL gateway + teks peringatan + exemptNumbers
+    │   └── rules.json       daftar aturan moderasi (extensible)
+    ├── logs/audit.log       catatan setiap pesan yang dihapus (otomatis)
+    └── data/warnings.json   hitungan peringatan per anggota (otomatis)
 ```
 
 ## Pengecualian (exempt), log, & ganti nomor
@@ -76,9 +101,9 @@ wa-bot/
 ```
 Simbol/spasi diabaikan otomatis. Setelah edit, restart brain atau `POST /reload`.
 
-**Log audit** â€” setiap pesan yang dihapus dicatat ke `brain/logs/audit.log` (waktu, grup, pengirim, aturan, cuplikan teks).
+**Log audit** — setiap pesan yang dihapus dicatat ke `brain/logs/audit.log` (waktu, grup, pengirim, aturan, cuplikan teks).
 
-**Riwayat peringatan** disimpan di `brain/data/warnings.json` â€” tidak hilang saat bot restart.
+**Riwayat peringatan** disimpan di `brain/data/warnings.json` — tidak hilang saat bot restart.
 
 **Ganti nomor bot:** klik dua kali **`ganti-nomor.bat`** (tutup dulu gateway lama). Aturan & config tetap utuh; hanya sesi login yang dibuang.
 
@@ -129,13 +154,13 @@ Edit `brain/config/rules.json`, tambahkan objek di array `rules`:
 
 Secara default semua grup memakai setelan global. Anda bisa **menimpa per-grup** dan membatasi grup mana yang diurus, di `brain/config/config.json`:
 
-- `manageAllGroups: true` (default) â€” bot mengurus **semua** grup tempat ia berada.
-- `manageAllGroups: false` â€” bot **hanya** mengurus grup yang terdaftar di `groups`; **diam total** di grup lain.
+- `manageAllGroups: true` (default) — bot mengurus **semua** grup tempat ia berada.
+- `manageAllGroups: false` — bot **hanya** mengurus grup yang terdaftar di `groups`; **diam total** di grup lain.
 
 ```json
 "manageAllGroups": false,
 "groups": {
-  "12036xxxxxxxxx@g.us": { "label": "Utama â€” moderasi penuh" },
+  "12036xxxxxxxxx@g.us": { "label": "Utama — moderasi penuh" },
   "12036yyyyyyyyy@g.us": {
     "label": "Pengumuman saja",
     "moderationEnabled": false,
@@ -153,7 +178,7 @@ Secara default semua grup memakai setelan global. Anda bisa **menimpa per-grup**
 ```
 
 Field yang **tidak ditulis** ikut setelan global. Override yang tersedia per grup:
-`moderationEnabled`, `floodEnabled`, `welcomeEnabled`, `commandsEnabled`, `welcomeMessage`, `rulesText`, `disabledRules` (id aturan yang dimatikan khusus grup ini), `exemptNumbers` (admin khusus grup â€” ditambahkan ke exempt global).
+`moderationEnabled`, `floodEnabled`, `welcomeEnabled`, `commandsEnabled`, `welcomeMessage`, `rulesText`, `disabledRules` (id aturan yang dimatikan khusus grup ini), `exemptNumbers` (admin khusus grup — ditambahkan ke exempt global).
 
 > **Cara mendapat JID grup:** setiap pesan yang dimoderasi mencatat `grup=<jid>` di `brain/logs/audit.log` (berakhiran `@g.us`). Setelah tahu JID-nya, masukkan ke `groups`.
 
@@ -201,7 +226,7 @@ Contoh: `!standings 8990`. Jika `dbConnectionString` kosong, perintah data memba
 3. Restart brain atau `POST /reload`.
 ## Broadcast dari sistem Chess Stream
 
-Sistem turnamen (PairingBot / website) bisa **mengirim pengumuman ke grup WA** (mis. "turnamen mau mulai") dengan memanggil endpoint `/broadcast` di brain â€” pola yang sama seperti PairingBot memanggil `TournamentDataUpdate.ashx`. **Tidak butuh DB.**
+Sistem turnamen (PairingBot / website) bisa **mengirim pengumuman ke grup WA** (mis. "turnamen mau mulai") dengan memanggil endpoint `/broadcast` di brain — pola yang sama seperti PairingBot memanggil `TournamentDataUpdate.ashx`. **Tidak butuh DB.**
 
 **Aktifkan:** isi `broadcastToken` di `brain/config/config.json` dan (opsional) peta `tournamentGroups`:
 ```json
@@ -229,7 +254,7 @@ Agar bot otomatis jalan setiap server booting (tanpa perlu login), pasang task S
 
 **Pasang** (PowerShell **sebagai Administrator**):
 ```powershell
-cd c:\Users\dev8\Documents\wa-bot
+cd <folder-repo>
 powershell -ExecutionPolicy Bypass -File service\install-autostart.ps1
 ```
 
@@ -249,7 +274,7 @@ powershell -ExecutionPolicy Bypass -File service\uninstall-autostart.ps1
 ## Catatan risiko
 
 Otomasi WhatsApp tidak resmi (melanggar ToS). Untuk menekan risiko ban:
-- Pakai **nomor khusus** bot (anggap sekali pakai â€” kalau di-ban tinggal ganti & scan ulang).
+- Pakai **nomor khusus** bot (anggap sekali pakai — kalau di-ban tinggal ganti & scan ulang).
 - Jangan agresif / spam. Mulai dari **satu grup**.
 - Config & aturan tetap aman di server walau nomor berganti.
 
