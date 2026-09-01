@@ -286,3 +286,11 @@ Otomasi WhatsApp tidak resmi (melanggar ToS). Untuk menekan risiko ban:
 - Jika kosong, bot memakai admin allowlist.
 - Bot hanya membalas DM masuk.
 
+---
+
+## 🤝 Kontribusi
+
+Bot ini saya kembangkan sendiri, atas penugasan dan arahan arsitek proyek di lingkungan
+komunitas catur Chess Stream / CCL. Seluruh keputusan teknis — pemisahan gateway dan brain,
+strategi anti-throttle, penanganan pemutusan koneksi, serta pengoperasian di server —
+saya kerjakan dan pertanggungjawabkan sendiri.
